@@ -1,0 +1,132 @@
+---
+title: "PRODUCT_EAN"
+author: "Prakash"
+date: "2023-01-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = '100%')
+```
+
+
+
+```{r}
+#Printing the current directory
+#print(getwd())
+
+#Printing the files in the current directory
+#print(list.files())
+```
+
+```{r}
+#Loading the necessary libraries
+library(viridis)
+library(ggplot2)
+library(dplyr)
+```
+
+
+**Reading the dataframe _conversione_ean_prodotto.csv_ which have the information about the Product. Below are first 6 observations of the data frame.**
+
+```{r}
+#Loading the dataset conversione_ean_prodotto.csv into product_ean dataframe
+product_ean <- read.csv("conversione_ean_prodotto.csv")
+
+#Printing the top few rows of the dataframe
+head(product_ean)
+```
+
+
+**Grouping the data frame _product_ean_ by the column _TIER_, then it's summarizing the data by counting the number of rows in each group and we can see that Tier is classified as _TIER1_,  _TIER2_, _TIER3_, _NO TIER_. where _TIER1_ identifies the Premium Products, _TIER2_ identifies the mid range products, _TIER3_ identifies the low range products.**
+
+```{r}
+product_ean_temp_tier <- product_ean %>% group_by(TIER)  %>%
+  summarise(Counts =n())
+
+#Displaying the unique tiers in the product_ean
+unique(product_ean$TIER)
+```
+
+**Below are the bar plot showing the count of each TIER in the 'product_ean_temp_tier' data frame, with the bars filled with a color corresponding to the TIER value.**
+```{r}
+ggplot(product_ean_temp_tier, aes(TIER,Counts,fill=TIER)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))+scale_fill_manual(values = c("NO TIER" = "#800080","TIER1" = "#2E8B57","TIER2" = "#A0522D","TIER3"="#008080"))
+
+```
+
+**Grouping the dataframe _product_ean_ by the column _OCCUSO_DES_(category type) and then counting the number of observations in each group and we have 4 categories namely _Pannolini_, _Wipes_, _Vario_, _Biscotti solubili_**
+```{r}
+product_ean_temp_occuso_des <- product_ean %>% group_by(OCCUSO_DES)  %>%
+  summarise(Counts =n())
+
+#Displaying the unique OCCUSO_DES in the product_ean dataframe
+unique(product_ean$OCCUSO_DES)
+```
+
+
+**Here, the bar plot shows the  counts of products with respect to OCCUSO_DES (Category type) and we can able to see that _Pannolini_ is the highest number of product category.**
+```{r}
+ggplot(product_ean_temp_occuso_des, aes(OCCUSO_DES,Counts,fill=OCCUSO_DES)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))+scale_fill_manual(values = c("Pannolini" = "#9ACD32","Wipes" = "#B0E0E6","Vario" = "#FF4500","Biscotti solubili"="#808000"))
+```
+
+
+**Grouping the data frame "product_ean" by the column "REFERENZA_DES"(Product details) and summarizing it by counting the number of occurrences of each unique value in the "REFERENZA_DES" column, resulting in a new data frame "product_ean_temp_ref_des" with columns "REFERENZA_DES" and "Counts". We can see below that we have around 179 unique products.**
+```{r}
+product_ean_temp_ref_des <- product_ean %>% group_by(REFERENZA_DES)  %>%
+  summarise(Counts =n())
+
+#Displaying the unique REFERENZA_DES in the product_ean dataframe
+unique(product_ean$REFERENZA_DES)
+```
+**Below bar plot shows the REFERENZA_DES (Details of the Products), with respect to its frequency**
+```{r fig.width=7}
+ggplot(product_ean_temp_ref_des, aes(REFERENZA_DES,Counts)) +    
+  geom_bar(stat = "identity",color="white",fill="#4B0082") +
+  theme(axis.text.x = element_text(angle = 90, size = 5))
+```
+
+
+**Creating a new data frame "product_ean_temp_seg_des" by grouping the "product_ean" dataframe by the column "SEGMENTO_DES"(Product type) and counting the number of occurrences of each group, and adding the count to a new column called "Counts" in the new data frame. We can see below that we have 16 types of Products.**
+```{r}
+product_ean_temp_seg_des <- product_ean %>% group_by(SEGMENTO_DES)  %>%
+  summarise(Counts =n())
+#Displaying the unique SEGMENTO_DES in product_ean dataframe
+unique(product_ean$SEGMENTO_DES)
+```
+
+**Below bar plot represents the unique Product type(SEGMENTO_DES) with respect to their occurances or counts. We can see below that _Baby dry_ is the most sold product**
+```{r fig.width=5, fig.height=3.2}
+#creating a bar plot of the count of each segment (SEGMENTO_DES) in the dataframe "product_ean", with bars filled in different colors according to the segment, and the X-axis labels are rotated by 90 degrees.
+ggplot(product_ean_temp_seg_des, aes(SEGMENTO_DES,Counts,fill=SEGMENTO_DES)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))+scale_fill_manual(values = c("Progressi" = "#000080","Progressi Mutandino" = "#00FA9A","Il Costumino" = "#2F4F4F","Baby Dry Mutandino"="#483D8B","Baby dry"="#708090","Baby Fresh"="#800000","Sensitive"="#7FFF00","Soleluna"="#808000","SoleeLuna Wipes"="#87CEEB","Naturello"="#8B008B","Vario"="#8B4513","Pampers Baby"="#9370DB","Soleluna Mutandino"="#8FBC8F","Acqua Pura"="#A52A2A","Green Generation"="#B8860B","Biscotti"="#DC143C"))
+```
+
+**Checking the unique observations of EAN(Unique identifier for each product)**
+```{r}
+#Displaying the unique EAN in product_ean dataframe
+unique(product_ean$EAN)
+#frequency table of the EAN column in the product_ean dataframe is being created and stored as a new dataframe named EAN_freq
+EAN_freq<-as.data.frame(table(product_ean$EAN))
+
+#Renaming the columns in EAN_freq
+colnames(EAN_freq)<- c("EAN","Frequency")
+```
+
+**Below are the frequency table for EAN, which is just a table to show that there is any EAN id is repeated or not. We can see that each of them are unique as all the frequency are one.**
+```{r}
+EAN_freq
+#We already know that the EAN is unique in this dataframe 
+#We can check here also that the count is 1 all through the EAN_freq table
+```
+
+
+

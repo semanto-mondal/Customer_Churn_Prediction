@@ -1,0 +1,353 @@
+---
+title: "FEATURE_IMPORTANCE_PROVINCES"
+output: html_document
+date: "2023-01-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = '100%')
+```
+
+```{r}
+
+#Loading the necessary libraries to the workplace
+library(xts)
+library(corrplot)
+library(RColorBrewer)
+library(plyr)
+library(ggplot2)
+library("GGally")
+library(mltools)
+library(data.table)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(DALEX)
+library(ingredients)
+library(varImp)
+library(e1071)
+# For decision tree model
+library(rpart)
+# For data visualization
+library(rpart.plot)
+# Loading package
+library(caTools)
+library(ROCR) 
+library(MASS)
+library(ggcorrplot)
+library(glmnet)
+```
+```{r}
+# Get and print current working directory.
+#print(getwd())
+
+#printing the list of files in the current working directory
+#print(list.files())
+```
+
+**Reading the dataframe _Processed_Customers_dt_normalized_provinces.csv_ which have the pre processed features with provinces and below table shows the correlation between the features.**
+```{r}
+#Reading the file Target_Build_Provinces.csv into Provinces_norm dataframe
+Provinces_norm <- read.csv("Processed_Customers_dt_normalized_provinces.csv",header=TRUE)
+#Checking correlation
+M <- cor(Provinces_norm)
+#Displaying the correlations to the output
+M
+```
+
+**Below heatmap represents the correlation between the features along with provinces, we can see here that mostly all the regions does not have much correlation.**
+```{r}
+#Plotting the correlation heatmap
+ggcorrplot::ggcorrplot(M,colors = c("#008000", "white", "#FF8C00"))
+```
+
+**From the below plot we can see that _total products_ have high correlation with _total gained points.**
+```{r}
+corr_simple <- function(data=Provinces_norm,sig=0.5){
+  #convert data to numeric in order to run correlations
+  #convert to factor first to keep the integrity of the data - each value will become a number rather than turn into NA
+  Provinces_cor <- data %>% mutate_if(is.character, as.factor)
+  Provinces_cor <- Provinces_cor %>% mutate_if(is.factor, as.numeric)
+  #run a correlation and drop the insignificant ones
+  corr <- cor(Provinces_cor)
+  #prepare to drop duplicates and correlations of 1     
+  corr[lower.tri(corr,diag=TRUE)] <- NA 
+  #drop perfect correlations
+  corr[corr == 1] <- NA 
+  #turn into a 3-column table
+  corr <- as.data.frame(as.table(corr))
+  #remove the NA values from above 
+  corr <- na.omit(corr) 
+  #select significant values  
+  corr <- subset(corr, abs(Freq) > sig) 
+  #sort by highest correlation
+  corr <- corr[order(-abs(corr$Freq)),] 
+  #turn corr back into matrix in order to plot with corrplot
+  mtx_corr <- reshape2::acast(corr, Var1~Var2, value.var="Freq")
+  
+  #plot correlations visually
+  corrplot(mtx_corr, is.corr=FALSE, tl.col="black", na.label=" ")
+}
+corr_simple()
+```
+
+
+```{r} 
+#As total products is highly correlated with total gained points, we are dropping the total products.We are using the linear model to find out the relationship between the variables. The lm() function is used to fit linear model to data frame and it can be used to carry out regression.**
+```
+
+```{r}
+###############################
+#Total products is highly correlated with tatal gained points
+#Dropping the total_products from the dataframe Provinces_norm and storing it back to Provinces_norm
+#Provinces_norm <- subset(Provinces_norm,select=-c(total_products))
+
+#Fitting the lm to the data
+#fit <- lm(Churn ~ ., data=Provinces_norm)
+#Displaying the summary of the fit
+#summary(fit)
+```
+
+```{r}
+#plot(fit)
+```
+```{r}
+#Checking if the length of coefficients is greater than the rank of fit 
+#length(fit$coefficients) > fit$rank
+```
+
+**Feature importance is the technique of getting the impact of features on output, which means it assigns the score of input features based on their importance to predict the output. More the features will be responsible to predict the output more will be their score.**
+
+*We have to consider the bias-variance trade-off while considering an ML model. We aim to develop a model having low bias and low variance. If our model has high bias and high variance it means it does not perform well in both training and test conditions. Sometimes we develop a more complex model which performs well in the train set but performs badly in the test set which leads to overfitting issues. Lasso Regression perform better for feature selection and coefficient penalization.*
+*We can consider the formula for SSE (sum of square error ) of Lasso Regression as follow:* 
+*𝑆𝑆𝐸=Σ(𝑦−𝑦̂)^2+𝜆Σ𝛽^*
+*Here Lambda is the penalization parameter and Beta is the coefficient of nothing but weight.
+When Lambda value is 0 then it doesn’t have any effect however, as λ increases to infinite the impact of the shrinkage penalty also increases and the ridge regression coefficients will get close zero. Lower Value of Lambda can result in overfitting whereas higher value can cause underfitting. We have to perform regularization to find the suitable value of lambda. We have used a custom function using cross-validation.  After doing so we have found optimal lambda as 0.00364. For this value of Lambda we have foind minimal RMSE (Root Mean Sqaured Error).
+So after performing Lasso regression we can see that total updates, first_interval, second_interval, total_gained_points, app_accessed_update_interval, app_access_prize_requested_interval, latest_app_access_interval are the most important features whereas others are less important.We can also consider the coefficient of the lasso regression.Here add the coefficient graph.*
+
+Lasso Regression dose completely nullified the predictors which have totally no impact and others are shrined close to zero. Hence we can consider the above mentioned features for our further model building and analysis.*
+
+```{r}
+#FEATURE IMPORTANCE
+#Logistic regression(glm)
+#Removing the column 124 because of multicollinearity
+colnames(Provinces_norm)
+provinces_norm_temp <- subset(Provinces_norm,select=-c(124))
+#Fitting the glm model to the dataset
+#model_churn_glm_P <- glm(Churn ~.,data =provinces_norm_temp, family = "binomial")
+#summary(model_churn_glm_P)
+```
+
+
+
+```{r}
+sample_indices <- sample(c(TRUE, FALSE), nrow(Provinces_norm), replace=TRUE, prob=c(0.7,0.3))
+
+train  <- Provinces_norm[sample_indices, ]
+test   <- Provinces_norm[!sample_indices, ]
+
+# Fit the Lasso regression model using glmnet
+lasso_model <- glmnet(as.matrix(train[, -126]), train$Churn, alpha = 1)
+
+# Use cross-validation to select the optimal lambda value
+cv_model <- cv.glmnet(as.matrix(train[, -126]), train$Churn, alpha = 1)
+
+# Extract the optimal lambda value
+opt_lambda <- cv_model$lambda.min
+
+# Extract the coefficients for the optimal lambda value
+lasso_coefs <- coef(lasso_model, s = opt_lambda)
+
+# Extract the non-zero coefficients (i.e., the most important features)
+selected_features <- rownames(lasso_coefs)[which(lasso_coefs != 0)]
+
+# Print the selected features
+cat("Selected features:", selected_features, "\n")
+
+# Create a train object for variable importance calculation
+lasso_train <- train(as.matrix(train[, -126]), train$Churn, method = "glmnet", classOut = "numeric")
+
+# Compute variable importance measures
+#varimp <- varImp(lasso_train, scale = TRUE)
+
+# Plot variable importance measures
+#par(mar=c(5, 15, 4, 2))
+#plot(varimp, las=2)
+```
+
+
+
+**Below plot shows the importance of each feature after removing the churn features. We can see that the scores are higher for the interval features, as those are the features build by our own rules. So further we will remove those feature and try to get more impact on other features.**
+
+```{r}
+#colnames(provinces_norm_temp)
+#explain_churn_glm_P <- explain(model_churn_glm_P,data = provinces_norm_temp[,-c(125)],y = provinces_norm_temp[,c(125)])
+
+#storing the feature importance of "explain_churn_glm_P" model and then a plotting the feature importance
+#fi_lgr <- feature_importance(explain_churn_glm_P, B = 1)
+#fi_lgr
+#plot(fi_lgr)
+```
+
+
+
+**Feature importance using Random Forest:**
+**Random forest can be used for feature selection. It is a resemble model where multiple decision tress are used and using voting the final outcome is chosen. Each tree consist of several leaves and nodes. The internal node, nothing but selected features are used to divide the dataset into two separate sets having similar types of characteristics. It uses one concept called Gini impurity which is the probability of a particular variable being classified wrongly when randomly chosen. The value ranges from 0 to 1. 0 means it’s a pure classification, all values belong to the same class whereas 1 means values belong to multiple classes are present.From the feature importance plot we can see that app_access_prize_requested_interval, app_access_mission_created_interval, , app_access_purchage_interval, first_interval, seconda_interval,total_prize_requested_points,total_updates,latest_app_accessed_interval,total_gift_requested are having high importance compare to others. We also got similar types of results from GLM too.**
+```{r}
+# Random Forest Method
+
+#Random forest can be very effective to find a set of predictors that best 
+#explains the variance in the response variable.
+
+#Converting the label column to a factor data type
+provinces_norm_temp$Churn <-as.factor(provinces_norm_temp$Churn)
+
+#Fitting the randomForest model to the data
+regressor <- randomForest(Churn ~ . , data= provinces_norm_temp, importance=TRUE) # fit the random forest with default parameter
+
+#getting variable importance, based on mean decrease in accuracy
+## conditional=True, adjusts for correlations between predictors
+RF_feature_importance_score_P<-caret::varImp(regressor, conditional=TRUE)
+
+#Creating a dataframe feature_importance  with feature and its importance score
+feature_importance <- cbind(newColName = rownames(RF_feature_importance_score_P), RF_feature_importance_score_P$`0`)
+summary(feature_importance)
+```
+
+
+```{r}
+#Renaming the columns of feature_importance to "feature","Importance_Score"
+colnames(feature_importance) <- c("feature","Importance_Score")
+
+#Converting the feature importance into a dataframe
+feature_importance <- as.data.frame(feature_importance)
+#Converting the Importance_Score into numeric datatype
+feature_importance$Importance_Score <- as.numeric(feature_importance$Importance_Score)
+#Displaying the structure of the dataframe feature_importance
+str(feature_importance)
+summary(feature_importance)
+```
+
+
+```{r}
+# creating a bar chart of feature importance scores 
+ggplot(feature_importance, aes(feature,Importance_Score)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**As most of high scores are covered with features with intervals, so we are removing those columns from the data set that were used in creating the target variable in order to prevent data leakage, which could skew the results of the target prediction. These columns are also found to have high feature importance scores, which further supports the decision to remove them. Below are the features which we have after removing the intervals.**
+```{r}
+provinces_norm_temp <-subset(Provinces_norm,select=-c(8,9,11,12,13,14,15))
+#Displaying the column names of provinces_norm_temp to the output
+colnames(provinces_norm_temp)
+```
+**As we saw, we have removed the interval features, and then again we are building the model to get feature importance. Here in GLM we are using Binomial Family as our outcome variables are having two categories 0 or 1. The coefficient estimate tells the average change in the log odds of the output variables with a one unit change in the predictor variable. We can see that total updates, total gained points, latest prize request points, total gifts requested having high coefficients and the regions are much significant. For those predictors P value is also less than 0.05 which means their impact on outcome variables are statistically significant. Null deviance tells how well the outcome variable can be predicted only using the intercept whereas residual deviance tells how well the model performs using multiple variables. The lesser the value is better. AIC values are useful when we compare multiple models. Lower the values is better. As we are not using multiple GLM model so this value is not that important to consider.**
+
+
+```{r}
+#Checking feature importance again
+#Logistic regression(glm)
+#Removing the column 117 bacause of multicollinearity
+#provinces_norm_temp2 <-provinces_norm_temp[,-c(118)]
+
+#Fitting the glm model to the data
+#model_churn_glm_R2 <- glm(Churn ~.,data =provinces_norm_temp2, family = "binomial")
+##Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred - when we use binomial as the family
+#The warning occurs when you fit a logistic regression model 
+#and the predicted probabilities of one or more observations in your data frame are indistinguishable
+#from 0 or 1. It's worth noting that this is a warning message and not an error.
+#Using quasibinomial will fix the warning
+#summary(model_churn_glm_R2)
+```
+```{r}
+#"The variable 'explain_churn_glm_R2' is being set to the output of the 'explain' function, which is being passed the 'model_churn_glm_R2' model, the data from 'provinces_norm_temp2' without the 118th column, and the 118th column of 'provinces_norm_temp2' as the target variable."
+#colnames(provinces_norm_temp2)
+#explain_churn_glm_R2 <- explain(model_churn_glm_R2,data = provinces_norm_temp2[,-c(118)],y = provinces_norm_temp2[,c(118)])
+
+#Getting the feature importance from the explainer
+#fi_rf2 <- feature_importance(explain_churn_glm_R2, B = 1)
+#Plotting the feature importance scores
+#plot(fi_rf2)
+
+```
+
+```{r}
+set.seed(1)
+sample_indices <- sample(c(TRUE, FALSE), nrow(provinces_norm_temp), replace=TRUE, prob=c(0.7,0.3))
+
+train  <- provinces_norm_temp[sample_indices, ]
+test   <- provinces_norm_temp[!sample_indices, ]
+
+# Fit the Lasso regression model using glmnet
+lasso_model <- glmnet(as.matrix(train[, -119]), train$Churn, alpha = 1)
+
+# Use cross-validation to select the optimal lambda value
+cv_model <- cv.glmnet(as.matrix(train[, -119]), train$Churn, alpha = 1)
+
+# Extract the optimal lambda value
+opt_lambda <- cv_model$lambda.min
+
+# Extract the coefficients for the optimal lambda value
+lasso_coefs <- coef(lasso_model, s = opt_lambda)
+
+# Extract the non-zero coefficients (i.e., the most important features)
+selected_features <- rownames(lasso_coefs)[which(lasso_coefs != 0)]
+
+# Print the selected features
+cat("Selected features:", selected_features, "\n")
+
+# Create a train object for variable importance calculation
+lasso_train <- train(as.matrix(train[, -119]), train$Churn, method = "glmnet", classOut = "numeric")
+
+# Compute variable importance measures
+#varimp <- varImp(lasso_train, scale = TRUE)
+
+# Plot variable importance measures
+#par(mar=c(5, 15, 4, 2))
+#plot(varimp, las=2)
+```
+
+**After removing the intervals, we can see that, the exact features which have high scores and the below plot shows the score of the feautes.**
+
+```{r}
+# Random Forest Method
+provinces_norm_temp2 <-provinces_norm_temp[,-c(118)]
+#Random forest can be very effective to find a set of predictors that best 
+#explains the variance in the response variable.
+
+#converting the Churn column to a factor datatype
+provinces_norm_temp2$Churn <-as.factor(provinces_norm_temp2$Churn)
+#Fitting the Random Forest model to the data
+regressor2 <- randomForest(Churn ~ . , data= provinces_norm_temp2, importance=TRUE) # fit the random forest with default parameter
+
+# getting variable importance, based on mean decrease in accuracy
+# conditional=True, adjusts for correlations between predictors
+RF_feature_importance_score_R2<-caret::varImp(regressor2, conditional=TRUE) 
+
+#Creating a dataframe with the feature names and its corresponding importance score
+feature_importance2 <- cbind(newColName = rownames(RF_feature_importance_score_R2), RF_feature_importance_score_R2$`0`)
+
+#Renaming the columns to meaningful names
+colnames(feature_importance2) <- c("feature","Importance_Score")
+
+#Converting the feature_importance2 as a dataframe
+feature_importance2 <- as.data.frame(feature_importance2)
+
+#Converting the Importance_Score to numeric data type
+feature_importance2$Importance_Score <- as.numeric(feature_importance2$Importance_Score)
+
+# Plotting the bar chart of features importance scores
+ggplot(feature_importance2, aes(Importance_Score,feature)) +    
+  geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**comparing the feature importance scores from both lasso and random forest, overall provincia is getting lower and also in some cases, negative scores. so we have removed those features.**
+

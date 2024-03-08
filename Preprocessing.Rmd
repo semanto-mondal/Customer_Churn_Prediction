@@ -1,0 +1,887 @@
+---
+title: "Università degli Studi di Napoli Federico II"
+author: "Prediction of Customer Churn"
+output:
+  html_document: default
+  word_document: default
+date: "2023-01-28"
+params: 
+  interactive: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = '100%')
+```
+
+##**Problem Statement**
+  Understanding the mums behaviour and Prevent churning using a Predictive model.
+
+##**Abstract**
+  To be writen..
+  
+```{r}
+setwd("/Users/prakash/Desktop/REPORT_01")
+#Checking the Working directory
+getwd()
+
+#Required Packages
+library(readr)
+library(viridis)
+library(ggsci)
+#Library for time series
+library(xts)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(naniar)
+library(gridExtra)
+getOption("repos")
+#Printing the list of files in the directory
+print(list.files())
+```
+
+Reading the dataframe _prodotti_caricati.csv_ which have the information related to Products and Displaying the internal structure of the dataframe.
+```{r}
+
+#Reading the dataframe "prodotti_caricati.csv" (Data about products loaded)
+product_loaded <- read.csv("prodotti_caricati.csv")
+#Displaying the internal structure of dataframe product_loaded
+str(product_loaded)
+```
+
+We have a field called _created_at_ which is currently in the character format. In order to analyze and manipulate this field effectively, we need to convert it into a date and time format. One way to accomplish this is by using the "POSIXct" method, which allows us to convert the character date and time into a format that is specific to R, known as POSIXct. This can be done by using the as.POSIXct() function in R, and specifying the format of the input string using the format argument. This will ensure that the date and time data is properly parsed and can be used for further analysis.
+
+Displaying the structure of dataframe _product loaded_ and now we can see that _created_at_ is converted to date and time format.
+```{r}
+product_loaded$created_at <- as.POSIXct(product_loaded$created_at,format="%Y-%m-%d %H:%M:%S")
+
+#Displaying the structure of dataframe product_loaded again
+str(product_loaded)
+```
+
+Checking the Unique records by identifying the distinct entries in the dataset and then displaying the structure of the unique records of the dataframe.
+
+We can see that we have 10 duplicate records in our previous dataframe, i.e Previously we have 1596529 and now we have 1596519 records.
+```{r}
+#checking for unique records by identifying distinct entries in the dataset.
+product_loaded_distinct <- unique(product_loaded)
+# Displaying the structure of the dataframe product_loaded_distinct
+str(product_loaded_distinct)
+#We can see that we had 10 duplicate records in our previous dataframe
+#Previously we have 1596529 and now we have 1596519 records
+```
+
+Visualizing the missing values in the data frame, _product loaded distinct_ for each of the variables. 
+
+We can see that _missionDetail_ have more than 60% of missing values.
+```{r}
+#Vizualizing the missing values in the dataframe product_loaded_distinct
+missing_pld<-gg_miss_var(product_loaded_distinct)
+missing_pld_data <- missing_pld[['data']]
+# Create a data frame from the provided data
+df_missing <- data.frame(variable = c("missionDetail","id_player","points","created_at", "EAN"),
+                 n_miss = missing_pld_data$n_miss,
+                 pct_miss = missing_pld_data$pct_miss)
+# Create the horizontal bar chart for percentage of missing values
+p1 <- ggplot(df_missing, aes(x = pct_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#970536"), width = 0.8, color = "#970536") +
+  ggtitle("Percentage of Missing Values") +
+  xlab("Percentage of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Create the horizontal bar chart for count of missing values
+p2 <- ggplot(df_missing, aes(x = n_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#15592a"), width = 0.8, color = "#15592a") +
+  ggtitle("Count of Missing Values") +
+  xlab("Count of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Use gridExtra to combine the two bar charts
+grid.arrange(p1, p2, ncol = 2)
+```
+
+As we are going to merge all the related data frames, using Id player, checking for count of unique players in _product loaded_ and we have 35949 unique id players.
+```{r}
+
+#As we are going to merge the dataframes with Id player
+#checking for count of unique players in product_loaded dataframe.
+
+length(unique(product_loaded$id_player)) 
+# we have 35949 unique id players
+```
+
+Changing the format of _created_at_ only with month and year, to visualize with respect to time and the below structure of the data frame shows the converted format.
+```{r}
+product_loaded_temp <- product_loaded
+#Taking only date part of created_at  
+product_loaded_temp$created_at <- as.Date(product_loaded_temp$created_at)
+
+#Further formatting the created_at to keep only year and month
+product_loaded_temp$created_at<-format(product_loaded_temp$created_at, format="%Y-%m")
+
+#Displaying the structure of dataframe product_loaded_temp
+str(product_loaded_temp)
+```
+
+Below plot shows the trend of the _number of products_ sold over time. From the plot, we can observe that the number of products **sold starts to increase from December 2020**, indicating the growth of number of products being sold. However, we can also see that there are fluctuations in the number of products, with some months showing a decrease in the number of products sold, and others showing increase. Overall, it seems that the number of products has been generally increasing until August 2022, where it starts to decrease. This trend suggests that there may be a seasonal pattern in the number of products being sold, or that there are external factors that are affecting the selling of products. It's important to investigate the causes of these fluctuations in order to optimize the products sold.
+```{r fig.width=6}
+#creating a dataframe for timeseries analysis of product_loaded_temp
+#Finding the number of products bought with respect to created_at
+product_loaded_temp_np <- product_loaded_temp %>% group_by(created_at)  %>%
+  summarise(total_products =n())
+#timeseries
+
+#Creating a new object called "product_loaded.ts_np" which is a time series object created from the "product_loaded_temp_np" data and set to have a frequency of 12 (meaning 12 observations per unit of time, such as 12 observations per month). The start argument is set to a specific date (c(2020, 12)) which means that the time series starts from December 2020.
+product_loaded.ts_np = ts(product_loaded_temp_np, frequency = 12, start=c(2020, 12))
+
+#Creating a new object called "product_loaded.xts_np" which is an xts (eXtensible Time Series) object created from the "product_loaded.ts_np" time series object. xts is a package that extends the functionality of time series objects, providing additional functionality such as indexing by time and aligning by time. The xts object is more powerful than the ts object and it is used when we want to perform time-based operations on the data.
+#In simple terms, it's converting a time series data (ts) to a more powerful time series data (xts) with added functionalities.
+product_loaded.xts_np = as.xts(product_loaded.ts_np)
+
+plot(product_loaded.xts_np,type='o',col=c("#660066"),xlab="Date",ylab="Number of products",main="Product Loaded",lwd=3.0)
+```
+
+Below plot shows the trend of the _mission points_ over time. From the plot, we can observe that the **mission points starts to increase from December 2020**, indicating a growth of mums participation in missions. However, we can also see that there are fluctuations in the mission points, with some months showing a decrease in the mission points, and others showing an increase. Overall, it seems that the misssion points has been generally increasing until August 2022, where it starts to decrease. This trend suggests that there may be a seasonal pattern in the participation in the missions which affect mission points, or that there are external factors that are affecting the misssion points. It's important to investigate the causes of these fluctuations in order to optimize the participation in mission points.
+```{r fig.width=6}
+#grouping the data by date, then summarizing the points earned by each date
+product_loaded_t_mission_points <- product_loaded_temp %>% group_by(created_at)  %>%
+  summarise(mission_points =sum(points))
+#timeseries
+#creating a new object called "product_loaded.ts_mission_points" which is a time series object created from the dataframe "product_loaded_t_mission_points" and set to have a frequency of 12 (meaning 12 observations per unit of time, such as 12 observations per month). The start argument is set to a specific date (c(2020, 12)) which means that the time series starts from December 2020.
+product_loaded.ts_mission_points = ts(product_loaded_t_mission_points, frequency = 12, start=c(2020, 12))
+
+#Creating a new object called "product_loaded.xts_mission_points" which is an xts (eXtensible Time Series) object created from the "product_loaded.ts_mission_points" time series object. xts is a package that extends the functionality of time series objects, providing additional functionality such as indexing by time and aligning by time. The xts object is more powerful than the ts object and it's used when we want to perform time-based operations on the data.
+#In simple terms, it's converting a time series data (ts) of the total points earned by each date to a more powerful time series data (xts) with added functionalities.
+product_loaded.xts_mission_points = as.xts(product_loaded.ts_mission_points)
+
+#plotting the total points earned by each date using an xts object
+plot(product_loaded.xts_mission_points,type='o',main="Mission Points",col="#00008B", xlab="Date",ylab="Mission Points",lwd=3.0)
+#This plot shows the trend of the mission points over time. From the plot, we can observe that the mission points starts to increase from December 2020, indicating a growth in the participation in missions. However, we can also see that there are fluctuations in the mission points, with some months showing a decrease in the mission points, and others showing an increase. Overall, it seems that the misssion points has been generally increasing until August 2022, where it starts to decrease. This trend suggests that there may be a seasonal pattern in the participation in the missions which affect mission points, or that there are external factors that are affecting the misssion points. It's important to investigate the causes of these fluctuations in order to optimize the participation in mission points.
+```
+
+To determine customer churn, we need to analyze the recent purchase behavior of mums by identifying their most recent actions. To accomplish this, we can retrieve the last three latest purchase dates of each mums, including their _Latest Purchase_, _2nd Latest_ and _3rd Latest_ transaction dates. By comparing these recent actions to previous purchase patterns, we can identify any changes or anomalies that may indicate customer(mums) churn.
+
+Below structure shows the newly added features _Latest Purchase_, _2nd Latest_ and _3rd Latest_.
+```{r}
+#To determine customer churn, we need to analyze the recent purchase behavior of customers by identifying their most recent actions. To accomplish this, we can retrieve the last three latest purchase dates of each customer, including their "Latest Purchase", "2nd Latest" and "3rd Latest" transactions dates. By comparing these recent actions to previous purchasing patterns, we can identify any changes or anomalies that may indicate customer churn.
+
+#grouping the data by player, counting the number of distinct products purchased, summing the points earned by each player and getting the 3 latest purchase date by each player.
+product_loaded_by_players <- product_loaded_distinct %>% group_by(id_player) %>% summarise(total_products = n_distinct(created_at,EAN),gained_points=sum(points), latest_purchase=max(created_at),second_latest_purchase=sort(created_at,decreasing=TRUE)[2],third_latest_purchase=sort(created_at,decreasing=TRUE)[3])
+
+
+#Displaying the structure of the dataframe product_loaded_by_players
+str(product_loaded_by_players)
+```
+
+In the above structure of the data frame, we can see that newly created features are in character format, we have to convert it to date and time format, so that we can carry out more advances operations on the time series data, such as calculating time based differences, aggregating by time periods and creating time-based visualizations.
+```{r}
+
+#All the purchase dates are in character datatype, converting the char to date and time format
+#This will enable us to carry out more advanced operations on the time-series data, such as calculating time-based differences, aggregating by time periods, and creating time-based visualizations.
+#latest Purchase
+product_loaded_by_players$latest_purchase <- as.POSIXct(product_loaded_by_players$latest_purchase,format = "%Y-%m-%d %H:%M:%S")
+
+#2nd latest
+product_loaded_by_players$second_latest_purchase <- as.POSIXct(product_loaded_by_players$second_latest_purchase,format = "%Y-%m-%d %H:%M:%S")
+
+#3rd latest purchase
+product_loaded_by_players$third_latest_purchase <- as.POSIXct(product_loaded_by_players$third_latest_purchase,format = "%Y-%m-%d %H:%M:%S")
+
+#Displaying the structure of the dataframe product_loaded_by_players
+str(product_loaded_by_players)
+```
+
+The _second latest purchase_ and _third latest purchase_ columns in the dataframe may contain null values if mums have recently started to use company products. These null values can skew the data and lead to inaccurate conclusions if not handled properly.
+
+Below structure shows that the _second latest purchase_ have 2412 null values and _third latest purchase_ have 3627 null values.
+```{r}
+#This will give the total number of missing values in the dataframe. This number is a useful metric to understand the proportion of missing data in the dataframe, which can help inform decisions on how to handle the missing values.
+colSums(is.na(product_loaded_by_players))
+```
+
+Visualizing the missing values of the newly created features. We can clearly see that the _second latest_ and _third latest purchase_ have null values.
+```{r}
+missing_plp<-gg_miss_var(product_loaded_by_players)
+missing_plp_data <- missing_plp[['data']]
+# Create a data frame from the provided data
+df_missing2 <- data.frame(variable=c("third_latest_purchase","second_latest_purchase","id_player","total_products","gained_points","latest_purchase"), n_miss = missing_plp_data$n_miss,pct_miss = missing_plp_data$pct_miss)
+# Create the horizontal bar chart for percentage of missing values
+p3 <- ggplot(df_missing2, aes(x = pct_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#970536"), width = 0.8, color = "#970536") +
+  geom_text(aes(label=pct_miss), vjust=1)+
+  ggtitle("Percentage") +
+  xlab("Percentage of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Create the horizontal bar chart for count of missing values
+p4 <- ggplot(df_missing2, aes(x = n_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#15592a"), width = 0.8, color = "#15592a") +
+  geom_text(aes(label=n_miss), vjust=1,hjust=1)+
+  ggtitle("Count") +
+  xlab("Count of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Use gridExtra to combine the two bar charts
+grid.arrange(p3, p4, ncol = 2)
+```
+
+We need to treat these null values differently in order to make sure our analysis and visualization of the data is accurate. One approach could be to exclude mums with null values in these columns from the analysis and visualization, as they have not been using the company's products long enough to be considered in the churn analysis. Another approach could be to impute the missing values with a default value, such as the customer's first purchase date, in order to include them in the analysis.
+
+It's important to consider these null values and handle them in a meaningful way, as it will impact the accuracy and reliability of the results of our analysis. Here, we are going with the first approach that is to exclude the customers with null values.
+
+Below structure shows that the structure of the data frame after removing the null values.
+```{r}
+#Removing the rows that contain null values in the dataframe "product_loaded_by_players" 
+product_loaded_by_players_cleaned <- na.omit(product_loaded_by_players)
+
+#taking those rows with null values in any column into product_loaded_by_players_with_na
+product_loaded_by_players_with_na <- product_loaded_by_players[!(product_loaded_by_players$id_player %in% product_loaded_by_players_cleaned$id_player),]
+
+#checking the structure of data frame product_loaded_by_players_cleaned
+str(product_loaded_by_players_cleaned)
+```
+
+Finding the time difference interval between _Latest purchase_, _second latest_ and _third latest purchase_ and creating the new features for the time intervals as __first interval_ and _second interval_. _First interval_ is the difference between _latest purchase_ and _2nd latest purchase_, whereas _second interval_ is the difference between _2nd latest_ and _3rd latest purchase_.
+
+###After creating the new features for time intervals, we are removing the _second latest purchase_ and _third latest purchase_ as we no longer require the information stored in those columns. It will help us in reducing the size of the dataframe and also it will not affect the analysis.
+
+###Below structure shows the structure of the data frame with newly created features.
+```{r}
+
+#We have to find the interval between the 3 purchases of the customer.
+
+#Finding the interval between the latest purchase and the second latest purchase
+product_loaded_by_players_cleaned$first_interval <-as.numeric(difftime(product_loaded_by_players_cleaned$latest_purchase, product_loaded_by_players_cleaned$second_latest_purchase,units="days"))
+
+#Finding the interval between the second latest purchase and the third latest purchase
+product_loaded_by_players_cleaned$second_interval <- as.numeric(difftime( product_loaded_by_players_cleaned$second_latest_purchase,product_loaded_by_players_cleaned$third_latest_purchase,units="days"))
+
+#Removing the columns "second_latest_purchase" and "third_latest_purchase" from the dataframe "product_loaded_by_players" as we no longer require the information stored in those columns.
+#It will help in reducing the size of the dataframe and also it will not affect the analysis.
+product_loaded_by_players_final <- subset(product_loaded_by_players_cleaned,select=-c(second_latest_purchase,third_latest_purchase))
+#Displaying the structure of the dataframe "product_loaded_by_players_final"
+str(product_loaded_by_players_final)
+```
+Below table shows the first few observations of the final data frame.
+```{r}
+#Printing the first few rows of the dataframe "product_loaded_by_players_final"
+head(product_loaded_by_players_final)
+```
+
+
+Reading the dataframe _accessi_app.csv_ which have the information related to App accessed by mums and Displaying the internal structure of the data frame.
+```{r}
+#Reading the dataframe "accessi_app.csv" (app accesses)
+app_accesses <- read.csv("accessi_app.csv")
+
+#Displaying the structure of the dataframe "app_accesses"
+str(app_accesses)
+```
+
+```{r}
+#In this code, the variable app_accesses_temp is being assigned the same value as the variable app_accesses. Then, the 'updated_at' column in the app_accesses_temp dataframe is being converted to a date format using the as.Date() function. After that, the format of the date is being changed to "YYYY-MM" using the format() function. This is being done to prepare the data for further analysis or visualization.
+app_accesses_temp <- app_accesses
+app_accesses_temp$updated_at <- as.Date(app_accesses_temp$updated_at)
+app_accesses_temp$updated_at<-format(app_accesses_temp$updated_at, format="%Y-%m")
+#A new dataframe called app_accesses_no_of_accessed is created by grouping the app_accesses_temp dataframe by the updated_at column and summarizing the number of people who accessed the app for each month. 
+app_accesses_no_of_accessed <- app_accesses_temp %>% group_by(updated_at)  %>%
+  summarise(Number_of_people_accessed =n())
+
+#The max and min functions are then used to find the latest and earliest month in the updated_at column of the app_accesses_no_of_accessed dataframe.
+max(app_accesses_no_of_accessed$updated_at)
+min(app_accesses_no_of_accessed$updated_at)
+```
+
+The _app_accesses_no_of_accessed_ variable is being converted into a time series object with a frequency of 12 months and starting from March 2022. This object is then being converted into an xts object which is a special type of time series object in R that allows for more efficient manipulation of time-based data. 
+
+The below graph shows that the app accessed by mums with respect to time, and from the plot we can see that the app accessed by mums are maximum in 2022 till august when comparing to other years.
+```{r fig.width=6.5}
+#timeseries
+app_accesses.ts_access = ts(app_accesses_no_of_accessed, frequency = 12, start=c(2022,3))
+app_accesses.xts_access = as.xts(app_accesses.ts_access)
+
+#plotting a line graph using the data in the "app_accesses.xts_access" object, which is a time series object containing the number of people who accessed the app on a monthly basis.
+plot(app_accesses.xts_access,col="#660033",xlab="Date",ylab="Number of accesses",main="App Accessed by User",lwd=3.0)
+
+```
+
+```{r}
+#converting the "updated_at" column in the "app_accesses" dataframe from character format to date format. This is done to ensure that the dates are in the correct format for further manipulation and analysis.
+app_accesses$updated_at <- as.POSIXct(app_accesses$updated_at,format = "%Y-%m-%d %H:%M:%S")
+str(app_accesses)
+```
+
+```{r}
+
+#grouping app_accesses by id_player and calculating the number of unique times the player has accessed the app or site and when is the latest time he has accesses the app or site
+app_accesses_by_players <- app_accesses %>% group_by(id_player) %>% summarise(total_updates=n_distinct(updated_at),latest_update = max(updated_at))
+
+#displaying the structure of the DataFrame app_accesses_by_players
+str(app_accesses_by_players)
+```
+
+```{r}
+#renaming the updated_at column name of "app_accesses_by_players" dataframe 
+colnames(app_accesses_by_players)[3] <- "app_accesses_updated_at"
+
+#Displaying the structure of the DataFrame after renaming column
+str(app_accesses_by_players)
+```
+Looking at the summary of the data contained in the _app_accesses_by_players_ dataframe. This summary includes information such as the number of observations, the mean, median, minimum, and maximum values of each column, as well as other descriptive statistics.
+```{r}
+#Looking at the summary of the data contained in the app_accesses_by_players dataframe. This summary includes information such as the number of observations, the mean, median, minimum, and maximum values of each column, as well as other descriptive statistics. 
+summary(app_accesses_by_players)
+```
+checking the unique _sources_ in the source column of _app_accesses_ and it is _app_ and _site_
+```{r}
+#checking the unique sources in the source column of app_accesses
+unique(app_accesses$source)
+#we have "Source" as app and Sito(website)
+```
+checking the number of unique _id_player_ present in the data frame _app_accesses_ and it has 31995 unique mums.
+```{r}
+#checking the number of unique id_player present in the dataframe app_accesses
+length(unique(app_accesses$id_player))
+```
+Checking the missing values of the _app_accesses_ data frame and below plot shows that there is no missing values here.
+```{r fig.width=3}
+
+#Vizualizing the missing values in the dataframe
+gg_miss_var(app_accesses)
+#There are no missing values in the DataFrame
+```
+Reading the dataframe _anagrafica.csv_ which have the information related to User Registrations and Displaying the internal structure of the dataframe.
+```{r}
+#reading the dataframe "anagrafica.csv" (user registration details)
+player_registration <- read.csv("anagrafica.csv")
+
+#Displaying the structure of the dataframe player_registration
+str(player_registration)
+```
+
+Checking the length of unique players and we have 45971 unique players.
+```{r}
+#checking the number of unique id_player present in the dataframe player_registration
+length(unique(player_registration$id_player))
+#we have 45971 unique players.
+```
+
+Checking the unique values of comune and We have 4768, comune.
+```{r}
+
+#Displaying the unique commune in the data frame
+#unique(player_registration$Comune)
+
+#Displaying the count of unique commune in the data frame
+length(unique(player_registration$Comune))
+#we have 4768 Comune
+```
+
+Checking the unique regions and we can see below that we have 21 regions including 1 empty string.
+```{r}
+#Displaying the unique Regions and the number of unique regions
+unique(player_registration$Regione)
+length(unique(player_registration$Regione))
+#21 unique regions with 1 region being empty string
+```
+
+Checking the unique provinces, and we can see that we have around 130 provinces including 1 empty value.
+```{r}
+#Displaying the unique Provincia and number of unique provincia in the data frame
+unique(player_registration$Provincia)
+length(unique(player_registration$Provincia))
+#130 Provincia with 1 provincia being an empty string
+```
+
+Checking the unique values of SiglaProvincia and we have 112 unique values along with NA and empty values.
+```{r}
+#Displaying the unique SiglaProvincia and the number of unique SiglaProvincia
+unique(player_registration$SiglaProvincia)
+length(unique(player_registration$SiglaProvincia))
+#112 SiglaProvincia with NA as well as empty string
+```
+
+We are comparing the unique values of the _Provincia_ and _SiglaProvincia_ columns, and since _SiglaProvincia_ has more missing values and is not useful for our analysis, we are removing the _SiglaProvincia_ column and not considering it in our analysis. The _Provincia_ column represents the province and _SiglaProvincia_ represents the abbreviation of the province.
+
+Below table shows the null values of the features after removing the _SiglaProvincia_.
+```{r}
+player_registration_cleaned <- subset(player_registration,select=-c(SiglaProvincia))
+
+#Checking for null values
+colSums(is.na(player_registration_cleaned))
+```
+
+Checking the number of observations in _player_registration_cleaned_ data frame.
+```{r}
+#checking the number of rows in player_registration_cleaned dataframe
+n<-nrow(player_registration_cleaned)
+n
+```
+The _player_registration_cleaned_ data frame is being used to calculate the number of missing values in each column. The summarize function is used to find the sum of missing values in each column and the _pivot_longer_ function is used to reshape the data frame so that each column is represented as a row in the new data frame. The _names_to ="feature"_ argument in _pivot_longer_ function is used to rename the columns and _values_to="num_missing_values"_ argument is used to rename the values in the new data frame. Then the code calculates the ratio of missing values to the total number of rows and adds it to the data frame as a new column called _"missing_val_ratio"_. The final data frame is stored in the variable _missing_vals_player_registration_cleaned_.
+
+Below table shows the missing values of each feature of the data frame and its ratio.
+
+Visualizing the missing values of the _player_registration_cleaned_ data frame. We can clearly see that the _ETA_MM_BambinoTODAY_ and _ETA_MM_BambinoREG_ have null values.
+```{r fig.width=5}
+#Finding the number of missing values in different columns of data frame
+missing_prc<-gg_miss_var(player_registration_cleaned)
+missing_prc_data <- missing_prc[['data']]
+
+# Create a data frame from the provided data
+df_missing3 <- data.frame(variable=c("ETA_MM_BambinoREG","ETA_MM_BambinoTODAY","id_player","DtaRegUserData","DtaPresuntoParto","Provincia","Comune","Regione"), n_miss = missing_prc_data$n_miss,pct_miss = missing_prc_data$pct_miss)
+
+# Create the horizontal bar chart for percentage of missing values
+p5 <- ggplot(df_missing3, aes(x = pct_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#970536"), width = 0.8, color = "#970536") +
+  geom_text(aes(label=pct_miss), vjust=1)+
+  ggtitle("Percentage") +
+  xlab("Percentage of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Create the horizontal bar chart for count of missing values
+p6 <- ggplot(df_missing3, aes(x = n_miss, y = variable)) +
+  geom_bar(stat = "identity", fill = c("#15592a"), width = 0.8, color = "#15592a") +
+  geom_text(aes(label=n_miss), vjust=1,hjust=1)+
+  ggtitle("Count") +
+  xlab("Count of Missing Values") +
+  ylab("Variable") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Use gridExtra to combine the two bar charts
+grid.arrange(p5, p6, ncol = 2)
+```
+
+From the above plot we can see clearly that the _ETA_MM_BambinoTODAY_ and _ETA_MM_BambinoREG_ have null values. So removing those null values and below plot shows that after removing the null values all the features having zero null values.
+```{r fig.width=4, fig.height=2.2}
+#We see that we have null values 
+#Removing the rows containing null values from the dataframe "player_registration_cleaned"
+player_registration_cleaned<-na.omit(player_registration_cleaned)
+#####################################
+#Vizualizing the missing values in the dataframe after removing the null values
+gg_miss_var(player_registration_cleaned)
+gg_miss_var(player_registration_cleaned, 
+            show_pct = TRUE) + 
+  ylim(0, 100)
+naniar::vis_miss(player_registration_cleaned, warn_large_data=F)
+```
+
+Checking the summary of the _player_registration_cleaned_ data frame.
+```{r}
+#Again checking the summary of the data frame "player_registration_cleaned"
+summary(player_registration_cleaned)
+```
+
+Below are the structure of the _player_registration_cleaned_.
+```{r}
+#Displaying the current structure of the data frame "player_registration_cleaned"
+str(player_registration_cleaned)
+```
+
+Usually the missing values will be not only in the form of null or NA's, empty strings also to be considered and it should be handled. So we are checking the empty strings of the features. Here we have 20391 empty values in _comune._
+```{r}
+
+#we can also see that, we have empty strings("").
+sum(player_registration_cleaned$Comune == "")
+#we have 20391 empty strings in comune.
+```
+
+Likewise, _Region_ also have 261 empty strings.
+```{r}
+sum(player_registration_cleaned$Regione == "")
+#we have 261 empty strings in Regione
+```
+
+Below result shows us 241 empty values is _Provincia_.
+```{r}
+sum(player_registration_cleaned$Provincia == "")
+#we have 241 empty strings in Provincia.
+```
+
+As per the above results, _comune_ have more than 50% of empty values, So we are removing the _comune_, as we have _Region_ and _Provincia._ As _Comune_ is the Municipalities of the _Provinces_, and we have _provinces_ and _Regions_, so we can eliminate _comune._
+
+Below are the structure of the data frame after removing the _comune_.
+```{r}
+player_registration_final <- subset(player_registration_cleaned,select=-c(Comune))
+#Displaying the structure of player_registration_final dataframe after removing Comune column
+str(player_registration_final)
+```
+Finding the maximum and minimum dates in the _DtaRegUserData_ column of the new summarized data frame "player_registration_temp_t".
+```{r}
+
+#converting the date columns "DtaRegUserData" and "DtaPresuntoParto" in the player_registration_final_temp dataframe into a date format, and then it is formatting them to show only the year and month. The new formatted date columns are then stored in the player_registration_final_temp dataframe.
+player_registration_final_temp <- player_registration_final
+player_registration_final_temp$DtaRegUserData <- as.Date(player_registration_final_temp$DtaRegUserData)
+player_registration_final_temp$DtaRegUserData<-format(player_registration_final_temp$DtaRegUserData,format="%Y-%m")
+player_registration_final_temp$DtaPresuntoParto <- as.Date(player_registration_final_temp$DtaPresuntoParto)
+player_registration_final_temp$DtaPresuntoParto<-format(player_registration_final_temp$DtaPresuntoParto,format="%Y-%m")
+
+#creating a dataframe for timeseries analysis of player_registration_final_temp for registrations
+
+#grouping the data by the "DtaRegUserData" column and summarizing it by counting the total number of registrations for each unique date.
+player_registration_temp_t <- player_registration_final_temp %>% group_by(DtaRegUserData)  %>%
+  summarise(total_registrations =n())
+
+#finding the maximum and minimum dates in the "DtaRegUserData" column of the new summarized data frame "player_registration_temp_t".
+max(player_registration_temp_t$DtaRegUserData)
+min(player_registration_temp_t$DtaRegUserData)
+```
+
+A time series object is being created from the data in the _player_registration_temp_t_ data frame, with the frequency of 12 (means the data is recorded for 12-month intervals, such as monthly) ans it start from June, 2014. The time series object is then converted into an xts (eXtensible Time Series) object, which is a specific type of time series object that allows for more flexibility in handling and manipulating time-based data. This is being done so that the data can be plotted or analyzed in a time-based context.
+
+Below plot shows that the _Number of Registrations_ with respect to the time, and from the plot we can see that the number of registrations are high between June and December 2019.
+```{r fig.width=5}
+player_registration.ts_treg = ts(player_registration_temp_t, frequency = 12, start=c(2014, 06))
+player_registration.xts_treg = as.xts(player_registration.ts_treg)
+
+# Plotting a graph of the number of player registrations over time.
+plot(player_registration.xts_treg,col="#4B0082",type='o',xlab="Date",ylab="Number of registrations",main="Number of Registrations",lwd=3.0)
+
+```
+
+Grouping the data with respect to _DtaPresuntoParto_ column, which is the Birth date of babies. Then, we are summarizing the data by counting the number of observations for each unique date of birth. Finally, finding the maximum and minimum values of the _DtaPresuntoParto_ column to determine the range of dates for which we have data. Below are the minimum and maximum range of month and year.
+```{r}
+##We use this for timeseries analysis of player_registration_final_temp for presumed child births
+player_registration_temp_b <- player_registration_final_temp %>% group_by(DtaPresuntoParto)  %>%
+  summarise(total_births =n())
+max(player_registration_temp_b$DtaPresuntoParto)
+min(player_registration_temp_b$DtaPresuntoParto)
+```
+
+_player_registration.ts_pp_ is created as a time series object using the _player_registration_temp_b_ data frame, with the frequency of 12 (months) and a start date of (2019, 09). And then _player_registration.xts_pp_ is created as an xts object using _player_registration.ts_pp._ An xts object is a time series object with additional capabilities for handling and analyzing time series data, it's used for making time-based operations on the time series data.
+
+The below Plot shows _babies birth_ with respect to time, and its higher in September, 2021 and gradually decreased after that. 
+```{r fig.width=5}
+player_registration.ts_pp = ts(player_registration_temp_b, frequency = 12, start=c(2019, 09))
+player_registration.xts_pp = as.xts(player_registration.ts_pp)
+
+#Plotting the number of presumed child births over time
+plot(player_registration.xts_pp,type='o',col="#008080",xlab="Date",ylab="Presumed Child births",main="Birth of Babies",lwd=3.0)
+```
+
+Below Plot shows the visualized form of _ETA_MM_BambinoTODAY_ (Current age of babies).
+```{r fig.width=5}
+ggplot(player_registration_final, aes(x=ETA_MM_BambinoTODAY)) + 
+    geom_histogram(color="white", fill="#006400",binwidth = 1)
+```
+
+Below plot shows the visualization of _ETA_MM_BambinoREG_ (Age of babies, at the time of registration)
+```{r fig.width=5}
+ggplot(player_registration_final, aes(x=ETA_MM_BambinoREG)) + 
+  geom_histogram(color="white", fill="#8B0000",binwidth = 1)
+```
+
+Removing rows from the _player_registration_final_ data frame as above that have negative values for the _ETA_MM_BambinoREG_ (age of babies at the time of registration) column. This is because these negative values cannot be accurately represented as 0 and may lead to misleading results. As a result, we will lose a large number of rows in the final data. To mitigate this issue, we are instead choosing to remove the ETA_MM_BambinoREG column entirely. This will allow us to maintain more rows in the final data and avoid any potential inaccuracies.
+```{r}
+player_registration_final_rm<-player_registration_final[player_registration_final$ETA_MM_BambinoREG>=0,]
+
+print(nrow(player_registration_final_rm))
+
+player_registration_final <- subset(player_registration_final,select=-c(ETA_MM_BambinoREG))
+print(nrow(player_registration_final))
+```
+
+Now we are merging the _user registration details_ and _app accesses_ data frames with repect to _id_player_
+```{r}
+#Merging "user registration details" and "app accesses" on id_player
+
+player_data_01 <- merge(x = player_registration_final, y=app_accesses_by_players, by="id_player")
+
+#Checking the number of empty strings in Regione and Provincia
+sum(player_data_01$Regione == "")
+sum(player_data_01$Provincia == "")
+```
+
+Checking the empty string values in the data frame, below results that we don't have any empty string values.
+```{r}
+#Taking only those rows that don't have empty string in Regione column
+player_data_01 <- subset(player_data_01,Regione!= "")
+
+#Again checking the number of entries in Provincia and Regione columns that are empty strings
+sum(player_data_01$Provincia == "")
+sum(player_data_01$Regione == "")
+```
+
+Below are the structure of the _player_data_01_ after merging.
+```{r}
+#Displaying the structure of the Dataframe player_data_01
+str(player_data_01)
+```
+
+Below are the summary of the data frame _player_data_01_.
+```{r}
+#Looking at the summary of the dataframe player_data_01
+summary(player_data_01)
+```
+
+Reading the dataframe _missioni_players.csv_ which have the information related to Missions, and missions played by mums. Then, Displaying the internal structure of the data frame.
+```{r}
+#reading the "missioni_players.csv" (Players missions)
+player_missions <- read.csv("missioni_players.csv")
+
+#Displaying the structure of the data frame player_missions
+str(player_missions)
+```
+
+Checking the missing values in the data frame and from the below plot, we can see that there are no missing values in the data frame.
+```{r fig.width=5}
+#Plotting the missing values in the player_missions dataframe
+gg_miss_var(player_missions)
+#There are no missing values in player_missions dataframe
+```
+
+Checking the classifications of _subType_ and we have 3 subtypes namely _cib_, _double_, _ticket-punti_.
+```{r}
+unique(player_missions$subType)
+#we have 3 subtypes, cib(food),double,ticket punti(points ticket)
+```
+
+Grouping the _player_missions_ data frame by the _subType_ column and counting the number of observations in each group of _subType._ Below plot shows that _double_ subtype have maximum which is close to 60000 and following that we have _cib_ subtype more than 50000 and _ticket-punti_ have less than 20000.
+```{r fig.width=5}
+player_missions_temp_subtype <- player_missions %>% group_by(subType)  %>%
+  summarise(Counts =n())
+
+#creating a bar chart to show the subType of missions on the x-axis and the number of observations for each subType on the y-axis.
+ggplot(player_missions_temp_subtype, aes(subType,Counts,fill=subType)) +    
+  geom_bar(stat = "identity") +scale_fill_manual(values = c("cib" = "#191970",
+                               "double" = "#580000",
+                               "ticket-punti" = "darkgreen"))
+```
+
+Checking the classifications of _type_ and we have only one type which is _special_
+```{r}
+#Finding the unique type present in type column in player_missions
+unique(player_missions$type)
+#we have only one type "Special"
+```
+Grouping the _player_missions_ data frame by the type column and counting the number of observations in each group of type. we can see that all the observations have single _type_ which is _special_
+```{r fig.width=5}
+player_missions_temp_type <- player_missions %>% group_by(type)  %>%
+  summarise(Counts =n())
+#creating a bar chart to show the type of missions on the x-axis and the number of observations for each type on the y-axis.
+ggplot(player_missions_temp_type, aes(type,Counts)) +    
+  geom_bar(stat = "identity",fill="#000080") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+The _type_ column in the _player_missions_ data frame will not provide much information, because it only contains one type of value. Therefore, we can drop that feature from the data frame. By dropping the "type" column, the data frame will be less cluttered, and the analysis performed on the data frame will be more focused. It is a common practice of Dimentional reduction of unsupervised learning in data analysis to remove columns that do not provide any meaningful information. Dropping unnecessary columns can make the data frame easier to work with and the results of the analysis will be more interpretable.
+
+Below structure shows the structure of the data frame after removing the _type_ feature.
+```{r}
+player_missions_cleaned <- subset(player_missions,select=-c(type))
+
+#Displaying the structure of the dataframe player_missions_cleaned
+str(player_missions_cleaned)
+```
+
+In the above structure of data frame, we can see that _created_at_ feature is in the form of character, So we are converting the _created_at_ feature in the _player_missions_cleaned_ dataframe from a string format to a POSIXct format, making it easier to work with the dates and times in the data. Again we are checking the structure of the data frame below.
+```{r}
+player_missions_cleaned$created_at <- as.POSIXct(player_missions_cleaned$created_at,format = "%Y-%m-%d %H:%M:%S")
+
+#Checking the structue of data frame player_missions_cleaned after format conversion 
+str(player_missions_cleaned)
+```
+
+Grouping the _player_missions_cleaned_ dataframe by the _id_player_ column, and then summarizing the data by summing the _points_ column and getting the max "mission_created_at" for each player, and creating a new dataframe _player_missions_final_  containing the summarized data and below is the structure of the data frame.
+```{r}
+#renaming the column of player_missions_cleaned
+colnames(player_missions_cleaned)[6] <- "mission_created_at"
+
+player_missions_final <- player_missions_cleaned %>% group_by(id_player) %>% summarise(total_points = sum(points), latest_mission_created_at = max(mission_created_at))
+
+#Displaying the structure of data frame player_missions_final
+str(player_missions_final)
+```
+Merging the _player_missions_final_ and _player_data_01_ with respect to the _id_player_ and below is the structure of the merged data frame which is _player_data_02_.
+```{r}
+player_data_02 <- merge(x=player_data_01,y=player_missions_final, by="id_player")
+
+#checking the datatype of the columns in the dataframe player_data_02
+str(player_data_02)
+```
+Now we are checking again the missing values of our merged data frame _player_data_02_ and from the below plot, we can see that there is no missing values.
+```{r fig.width=4}
+#Vizualizing the missing values in the dataframe
+gg_miss_var(player_data_02)
+#There are no missing values in the dataframe player_data_02
+```
+
+Reading the dataframe _premi_mamme.csv_ which have the information related to awards (prize) requested by the mums. Then, checking the missing values of the data frame. From the below plot we can see that we don't have any missing values.
+```{r fig.width=4}
+#reading the data from "mom awards"
+mom_awards <- read.csv("premi_mamme.csv")
+gg_miss_var(mom_awards)
+```
+Checking the unique distinct mums id and we can see below result that we have 18267 unique mums who requested prize.
+```{r}
+#Checking the unique number of id_player in mom_awards
+length(unique(mom_awards$id_player))
+
+#checking the datatype of the columns in the dataframe mom_awards
+str(mom_awards)
+```
+In the above structure of the data frame, we can see that the _id_player_ is in number format, so converting it to integer format and viewing the structure of the data frame again.
+```{r}
+#We see that the id_player is of type num in this 
+#Converting the id_player to integer type
+mom_awards$id_player <- as.integer(mom_awards$id_player) 
+#Displaying the structure of the data frame mom_awards
+str(mom_awards)
+```
+Checking the unique prize names in the _nomepremio_ and we can see below that we have around 71 unique prize.
+```{r}
+#Checking the unique prize names present in the nomepremio column
+unique(mom_awards$nomepremio)
+#number of unique prices
+length(unique(mom_awards$nomepremio))
+```
+
+Grouping the _mom_awards_ data frame by the _nomepremio_ column, and then counting the number of occurences of each prize, creating a new dataframe _mom_awards_temp_prizes_ containing the summarized data. Below plot shows the prize requested by mums, and we can see that _Buono Sconto Leolandia_ is the highest number of times request prize by mums.
+```{r fig.width=7}
+mom_awards_temp_prizes <- mom_awards %>% group_by(nomepremio)  %>%
+  summarise(Counts =n())
+
+#plotting a bar chart showing the distribution of awards in the "mom_awards_temp_prizes" dataframe
+ggplot(mom_awards_temp_prizes, aes(nomepremio,Counts)) +    
+  geom_bar(stat = "identity",fill="#4B0082") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+Checking the unique prize distribution format which is _formatPremio_, and from below result we can see there are two types of prize distribution, physical distribution and digital distribution.
+```{r}
+#displaying the unique format premium
+unique(mom_awards$formatPremio)
+#we have digial and physical, two formats
+```
+
+As per the format, physical gifts should be delivered to the player home and digital gifts like gift cards or wishes are delivered to mums in the form of email. In contrast to that we can see the unique _physical_ format is _home_ and _digit_ unique format is _email_.
+```{r}
+#let's check the unique values of physical format in delivery mode
+unique(mom_awards[mom_awards$formatPremio=='physical',]$deliveryMode)
+#we are getting it as "home"
+
+#let's check the unique values of digital format in delivery mode
+unique(mom_awards[mom_awards$formatPremio=="digital",]$deliveryMode)
+#we are getting it as "email"
+```
+Below plot shows that there are more _physical_ prize (delivered to home) when comparing with _digital_ prize (email).
+```{r}
+#creating a new dataframe mom_awards_temp_format, where each row represents a unique value in the "formatPremio" column and the "Counts" column represents the number of occurrences of that value in the original dataframe.
+mom_awards_temp_format <- mom_awards %>% group_by(formatPremio)  %>%
+  summarise(Counts =n())
+# Plotting the bar chart of formatPremio counts
+ggplot(mom_awards_temp_format, aes(formatPremio,Counts,fill=formatPremio)) +    
+  geom_bar(stat = "identity") +scale_fill_manual(values = c("digital" = "#5e1f52","physical" = "#5400c7"))
+```
+checking the unique _prize_ type and we have _basic_, _gift_, _special_.
+```{r}
+#Checking the unique prize type
+unique(mom_awards$tipopremio)
+```
+Below plot shows that the most of the mums have requested _basic prize_, followed by _gifts_ and then some mums also reuested _special_. These prize requests are depend on their points.
+```{r}
+#creating a new dataframe mom_awards_temp_tipo, where each row represents a unique value in the "tipopremio" column and the "Counts" column represents the number of occurrences of that value in the original dataframe.
+mom_awards_temp_tipo <- mom_awards %>% group_by(tipopremio)  %>%
+  summarise(Counts =n())
+#creating a bar plot of the "tipopremio" column data with the y-axis representing the count of occurrences and the x-axis representing the unique values of the "tipopremio" column.
+ggplot(mom_awards_temp_tipo, aes(tipopremio,Counts,fill=tipopremio)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))+scale_fill_manual(values = c("basic" = "#DC143C","gift" = "#6B8E23","special"="#4682B4"))
+```
+As we already seen the plot for _formatPremio_, _physical_ type is higher than _digital_, so contrast to that the below plot shows that there are more gifts delivered to _home_  (physically) when comparing with _email_ prize (digitally).
+```{r}
+mom_awards_temp_delivery <- mom_awards %>% group_by(deliveryMode)  %>%
+  summarise(Counts =n())
+# Plot the bar chart of delivery mode and its counts
+ggplot(mom_awards_temp_delivery, aes(deliveryMode,Counts,fill=deliveryMode)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))+scale_fill_manual(values = c("email" = "#006666","home" = "#FF9900"))
+```
+
+From the above plots, its very clear that _deliveryMode_ which includes information about how the awards were delivered to the players (e.g."home", "email"). However, the information about delivery _home_ and _email_ is redundant as it conveys the same information as _physical_, _digital_ mode. So, in order to make the data more clean and easy to work with, the _deliveryMode_ column is being removed from the _mom_awards_ data frame. 
+```{r}
+#formatPremio can also be dropped since tipopremio will be enough 
+mom_awards_cleaned <- subset(mom_awards,select=-c(deliveryMode,formatPremio))
+#Displaying the structure of the dataframe mom_awards_cleaned
+str(mom_awards_cleaned)
+```
+Grouping with respect to _id_player_ and finding the _total prize_ requested till date. Below are teh structure of the data frame.
+```{r}
+mom_awards_final_01 <- mom_awards_cleaned %>% group_by(id_player) %>% summarise(total_gifts_requested = length(datarichiestapremio))
+
+#Grouping mom_awards_cleaned with respect to id_player and getting the latest date columns id_player wise
+mom_awards_final_02 <- mom_awards_cleaned %>% group_by(id_player) %>% slice_max(datarichiestapremio)
+
+#Grouping df5_grp_id_player2 with respect to id_player and taking the latest date and total prizes requested on that date
+mom_awards_final_02_1 <- mom_awards_final_02 %>% group_by(id_player) %>% summarise(latest_prize_request_date=max(datarichiestapremio),latest_prizes_requested = length(datarichiestapremio))
+
+#Grouping mom_awards_final_02 with respect to id_player and finding the total latest date prize request points
+mom_awards_final_02_2 <- mom_awards_final_02 %>% group_by(id_player) %>% summarise(latest_prizes_request_points=sum(puntipremio))
+
+#Grouping with respect to id_player and finding the total basic prizes requested till date
+mom_awards_final_02_3 <- mom_awards_cleaned %>% group_by(id_player) %>% summarise(basic_prizes_requested = sum(tipopremio=="basic"))
+
+#Grouping  with respect to id_player and finding the total gift prizes requested
+mom_awards_final_02_4 <- mom_awards_cleaned %>% group_by(id_player) %>% summarise(gift_prizes_requested = sum(tipopremio=="gift"))
+
+#Grouping  with respect to id_player and finding the total special prizes
+mom_awards_final_02_5 <- mom_awards_cleaned %>% group_by(id_player) %>% summarise(special_prizes_requested = sum(tipopremio=="special"))
+
+
+#Merging all the dataframes mom_awards_final_02_1 to mom_awards_final_02_5 on id_player
+mom_awards_merge_01 <-merge(x =mom_awards_final_02_1 , y = mom_awards_final_02_2, by = "id_player")
+mom_awards_merge_02 <-merge(x =mom_awards_final_02_3 , y = mom_awards_final_02_4, by = "id_player")
+mom_awards_merge_03 <-merge(x =mom_awards_merge_02 , y = mom_awards_final_02_5, by = "id_player")
+mom_awards_merge_04 <-merge(x =mom_awards_merge_01 , y = mom_awards_merge_03, by = "id_player")
+
+#Merging  mom_awards_final_01 and mom_awards_merge_04 
+mom_awards_final <- merge(x =mom_awards_final_01 , y = mom_awards_merge_04, by = "id_player")
+
+#Checking the datatype of the columns in the dataframe mom_awards_final
+str(mom_awards_final)
+```
+In the above structure of the data, we can see that the _latest_prize_request_date_ is in character format, so converting it to date and time format and Viewing the structure of the data frame below.
+```{r}
+#Converting latest_prize_request_date from chr to datetime(POSIXct)
+mom_awards_final$latest_prize_request_date<- as.POSIXct(mom_awards_final$latest_prize_request_date,format = "%Y-%m-%d")
+
+#Checking the datatypes of the columns again
+str(mom_awards_final)
+```
+
+Merging _player_data_02_ and _mom_awards_final_ with respect to the _id_player_ and visualizing the summary of the merged data frame.
+```{r}
+#Merging player_data_02 and mom_awards_final
+mom_awards_finally <- merge(x =player_data_02 , y = mom_awards_final, by = "id_player")
+
+#Printing the summary of the dataframe df_merged3
+summary(mom_awards_finally)
+```
+
+Checking the missing values of the _mom_awards_finally_ data frame and below plot shows that we don't have missing values.
+```{r fig.width=4.5}
+#Plotting the missing values in the data frame mom_awards_finally
+gg_miss_var(mom_awards_finally)
+#There are no missing values in the data
+```
+
+```{r}
+#Writing it as CSV
+#merging mom_awards_finally and product_loaded_by_players_final
+customer_churn_without_na <- merge(x =mom_awards_finally , y = product_loaded_by_players_final, by = "id_player")
+
+customer_churn_without_na_updated <- customer_churn_without_na %>% transmute(customer_churn_without_na,total_goined_points = total_points + gained_points)
+
+customer_churn_without_na_cleaned <- subset(customer_churn_without_na_updated,select=-c(total_points,gained_points))
+
+getwd()
+write.csv(customer_churn_without_na_cleaned,"CustomerChurn_updated_final.csv",row.names=TRUE)
+write.csv(customer_churn_without_na, "CustomerChurn.csv", row.names=TRUE)
+```

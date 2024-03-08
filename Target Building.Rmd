@@ -1,0 +1,1893 @@
+---
+title: "Target Building"
+author: "Prakash"
+output:
+  html_document: default
+  word_document: default
+date: "2023-01-28"
+params: 
+  interactive: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = '100%')
+```
+
+
+```{r}
+#Setting the working directory to the location where the data is present
+setwd("/Users/prakash/Desktop/REPORT_01")
+
+#Printing the list of files in the directory
+#print(list.files())
+```
+
+```{r}
+#Installing the necessary libraries
+#install.packages("tidyverse")
+#install.packages('corrplot')
+#install.packages('plyr')
+#install.packages("GGally")
+#install.packages('mltools')
+#install.packages("plotly")
+#install.packages("resh")
+#install.packages("resample")
+# load and install ggcorplot
+#install.packages("ggcorrplot")
+#Correlation analysis between the different time gaps 
+#install.packages('corrplot')
+#install.packages('ggplot2')
+```
+```{r}
+#Loading the necessary libraries
+
+# To load a library, use the function
+library(xts)
+library(corrplot)
+library(viridis)
+library(RColorBrewer)
+library(plyr)
+library(ggplot2)
+library("GGally")
+library(mltools)
+library(data.table)
+library(dplyr)
+library(resample)
+#For subplots
+library(plotly) 
+library(ggcorrplot)
+library(naniar)
+library(corrplot)
+library(RColorBrewer)
+library(ggplot2)
+library(caret)
+```
+
+
+
+**Reading the dataframe _CustomerChurn_updated_final.csv_ which have the pre-processed features of all the data frames. We can see the 22 feature names so far we have with us.**
+
+
+```{r}
+
+#reading in CSV file CustomerChurn_updated_final.csv into dataframe CustomerChurn
+CustomerChurn <- read.csv("CustomerChurn_updated_final.csv")
+
+#Printing the column names in the dataframe CustomerChurn
+colnames(CustomerChurn)
+```
+
+**As we already merged all the necessary data frame with respect to id player, so we are removing the if player player which will not be much usefull for our analyis and along with that we are removing the first column which is with X label which gives the index of the observations. Below are the structure of _CustomerChurn_ data frame.**
+
+
+```{r}
+#removing the first and second columns since we don't need the X(index imported as a column) as well as the id_player 
+CustomerChurn <- CustomerChurn[,c(-1:-2)]
+colnames(CustomerChurn)[20] <-  "total_gained_points"
+#displaying the structure of the resulting data frame.
+str(CustomerChurn)
+```
+
+
+**We are converting the _latest_purchase_ column in the _CustomerChurn_ data frame from a character data type to a date and time data type**
+
+
+**This conversion is important because having the latest_purchase column in a character format will not allow us to perform any date-time related operation on the column, like finding the difference between two dates or extracting the year, month, day etc from the date. By converting it to POSIXct format, we can now perform all those operations.**
+
+```{r}
+CustomerChurn$latest_purchase <- as.POSIXct(CustomerChurn$latest_purchase,format = "%Y-%m-%d %H:%M:%S")
+
+#converting the "accessi_app_updated_at" column in the "CustomerChurn" data frame from a character data type to a date-time data type
+CustomerChurn$app_accesses_updated_at <- as.POSIXct(CustomerChurn$app_accesses_updated_at,format = "%Y-%m-%d %H:%M:%S")
+
+#converting the "latest_created_at" column in the "CustomerChurn" data frame from a character data type to a date-time data type
+CustomerChurn$latest_mission_created_at <- as.POSIXct(CustomerChurn$latest_mission_created_at,format = "%Y-%m-%d %H:%M:%S")
+
+#Displaying the structure of the data frame CustomerChurn
+str(CustomerChurn)
+```
+
+
+**Logically, It's not necessary that all the customers who are all accessing or updating the app, needs to do the purchase. There might be customers, who are just accessing the application, but not purchasing the product for long interval of time. There may be mums who use the app regularly but do not make any purchases for an extended period of time. It is important to keep this in mind when analyzing the data and trying to understand mums behavior, as the _latest_purchase_ column in the _CustomerChurn_ data frame will only reflect the behavior of mums who have made a purchase. To get a complete picture of the mums behavior, we should need the information about app usage or engagement, even if the mum has not made a purchase. This would allow us to understand how mums interact with the app and identify potential areas for improvement or targeted marketing efforts.**
+
+
+**So we are Calculating the time difference between the _latest_purchase_ and _app_updated_ features in the _CustomerChurn_ data frame. By finding the time difference them, we can understand how long it has been since the mum last made a purchase and last updated the app. This information can be useful for identifying patterns in mums behavior, such as how frequently mums make purchases or how long they go without using the app before making a purchase. Additionally, this information can be used to target specific customer segments with marketing campaigns or to identify potential areas for improvement in the app to increase mums engagement and retention.**
+
+
+**LikeWise, we are Calculating the time difference between the _app_accesses_updated_at_ and _latest_mission_created_at_ features in the _CustomerChurn_ data frame. By finding the time difference between them, we can understand how long it has been since the mums last updated the app and created a new mission. This information can help to understand the level of engagement of customer with the app, if there is a long interval between the _app updated_ and _latest mission created_, it can be assumed that the mum is not engaging with the app much. Furthermore, this information can also be used to identify patterns in mum behavior and target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase mums engagement and retention.**
+
+
+**We are calculating the time difference between the _app_accesses_updated_at_ and _latest_prize_request_date_ columns in the _CustomerChurn_ data frame. By finding the time difference, we can understand how long it has been since mums last accessed the app and requested a prize. This information can be used to identify patterns in mums behavior, such as how frequently they request prizes or how long they go without using the app before requesting a prize. Furthermore, this information can also be used to target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase mums engagement and retention. Additionally, this information can be used to evaluate the effectiveness of any reward or loyalty program that the company might be running.**
+
+
+**Follwing the above, we are calculating the time difference between the _app_accesses_updated_at_ and _DtaRegUserData_ in the _CustomerChurn_ data frame. By finding the time difference, we can understand how long it has been since the mums _last accessed_ the app and _registered_ on the app. This information can be used to understand the level of engagement of customer with the app, if the interval between the app updated and registration date is long, it can be assumed that the mum is not engaging with the app much after the registration. Furthermore, this information can also be used to identify patterns in mums behavior and target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention. Additionally, this information can also be used to evaluate the effectiveness of any onboarding process the company might be running for new customers**
+
+
+**Following, Calculating the time difference between the _latest_purchase_ and _latest_prize_request_date_ columns in the _CustomerChurn_ data frame. By finding the time difference, we can understand how long it has been since the mum at last done the purchase and requested a prize. This information can be used to identify patterns in mums behavior, such as how frequently they request prizes or how long they go without requesting a prize after making a purchase. Additionally, this information can be used to evaluate the effectiveness of any reward or loyalty program that the company might be running. It also can be used to understand the correlation between making a purchase and requesting a prize, if there is a long interval between the latest purchase and latest prize request date it may indicate that the mums are not engaging with the reward program. Furthermore, this information can be used to target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention.**
+
+
+**Finally below are the structure of the data frame after adding the new time difference features.**
+
+
+```{r}
+#calculating the time difference between the "latest_purchase" and "app_updated" columns in the "CustomerChurn" data frame. By finding the time difference, we can understand how long it has been since the customer last made a purchase and last updated the app. This information can be useful for identifying patterns in customer behavior, such as how frequently customers make purchases or how long they go without using the app before making a purchase. Additionally, this information can be used to target specific customer segments with marketing campaigns or to identify potential areas for improvement in the app to increase customer engagement and retention.
+CustomerChurn$app_access_purchase_interval <- as.numeric(difftime(CustomerChurn$app_accesses_updated_at,CustomerChurn$latest_purchase,units="days"))
+
+#calculating the time difference between the "app_accesses_updated_at" and "latest_mission_created_at" columns in the "CustomerChurn" data frame. By finding the time difference, we can understand how long it has been since the customer last updated the app and created a new mission. This information can help to understand the level of engagement of customer with the app, if there is a long interval between the app updated and latest mission created, it can be assumed that the customer is not engaging with the app much. Furthermore, this information can also be used to identify patterns in customer behavior and target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention.
+CustomerChurn$app_access_mission_created_interval <-   as.numeric(difftime(CustomerChurn$app_accesses_updated_at,CustomerChurn$latest_mission_created_at,units="days"))
+
+#calculating the time difference between the "app_accesses_updated_at" and "latest_prize_request_date" columns in the "CustomerChurn" data frame. By finding the time difference, we can understand how long it has been since the customer last accessed the app and requested a prize. This information can be used to identify patterns in customer behavior, such as how frequently they request prizes or how long they go without using the app before requesting a prize. Furthermore, this information can also be used to target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention. Additionally, this information can be used to evaluate the effectiveness of any reward or loyalty program that the company might be running.
+CustomerChurn$app_access_prize_request_interval <- as.numeric(difftime(CustomerChurn$app_accesses_updated_at,CustomerChurn$latest_prize_request_date,units="days"))
+
+#calculating the time difference between the "app_accesses_updated_at" and "DtaRegUserData" in the "CustomerChurn" data frame. By finding the time difference, we can understand how long it has been since the customer last accessed the app and registered on the app. This information can be used to understand the level of engagement of customer with the app, if the interval between the app updated and registration date is long, it can be assumed that the customer is not engaging with the app much after the registration. Furthermore, this information can also be used to identify patterns in customer behavior and target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention. Additionally, this information can also be used to evaluate the effectiveness of any onboarding process the company might be running for new customers
+CustomerChurn$app_access_reg_interval <- as.numeric(difftime(CustomerChurn$app_accesses_updated_at,CustomerChurn$DtaRegUserData,units="days"))
+
+#Calculating the time difference between the "latest_purchase" and "latest_prize_request_date" columns in the "CustomerChurn" data frame. By finding the time difference, we can understand how long it has been since the customer last made a purchase and requested a prize. This information can be used to identify patterns in customer behavior, such as how frequently they request prizes or how long they go without requesting a prize after making a purchase. Additionally, this information can be used to evaluate the effectiveness of any reward or loyalty program that the company might be running. It also can be used to understand the correlation between making a purchase and requesting a prize, if there is a long interval between the latest purchase and latest prize request date it may indicate that the customers are not engaging with the reward program. Furthermore, this information can be used to target specific customer segments with marketing campaigns or identifying areas for improvement in the app to increase customer engagement and retention.
+CustomerChurn$purchase_prize_req_interval <- as.numeric(difftime(CustomerChurn$latest_purchase,CustomerChurn$latest_prize_request_date,units="days"))
+
+#Displaying the structure of the data frame CustomerChurn
+str(CustomerChurn)
+```
+
+
+**Getting the time interval between latest app access date (maximum date in the app_accesses_updated_at) and app accessed date of customer. This information will be useful for understanding how frequently mums are accessing the app, and could potentially be used to identify patterns or trends related to mums engagement or app usage.**
+
+
+```{r}
+#latest date of app accessed by the user.
+Latest_date_of_app_access <- max(CustomerChurn$app_accesses_updated_at)
+
+#getting the time interval between latest app access date (maximum date in the app_accesses_updated_at) and app accessed date of customer
+#This information can be useful for understanding how frequently customers are accessing the app, and could potentially be used to identify patterns or trends related to customer engagement or app usage.
+CustomerChurn$latest_app_accessed_interval <- as.numeric(difftime(Latest_date_of_app_access,CustomerChurn$app_accesses_updated_at,units="days"))
+```
+
+
+**We can see the visualization of missing values of each variables in data frame**
+
+
+```{r fig.width=8,out.width='100%', fig.align='center'}
+#Visualizing the missing values in the dataframe CustomerChurn
+#gg_miss_var(CustomerChurn)
+naniar::vis_miss(CustomerChurn, warn_large_data=F)
+#There are no missing values in the dataframe
+```
+
+
+```{r fig.width=4.5 ,fig.height = 3.5,out.width='100%', fig.align='center'}
+#Visualizing the missing cases in the dataframe CustomerChurn
+gg_miss_case(CustomerChurn)
+#There are no missing cases in the dataset
+```
+
+
+**creating a new data frame called "Cust_churn" by subsetting the "CustomerChurn" data frame. Specifically, it is removing the following columns from the _CustomerChurn_ data frame: _DtaRegUserData_, _DtaPresuntoParto_, _app_accesses_updated_at_, _latest_mission_created_at_, _latest_prize_request_date_, and _latest_purchase_. The resulting _Cust_churn_ data frame will only contain the remaining columns from the original _CustomerChurn_ data frame.**
+
+**This will be useful when we want to work with a smaller subset of the data and want to exclude certain columns that are not relevant to our analysis. It also allows to focus on specific variables and reduces the size of the dataframe which can be useful when working with large datasets. We can see the structure of the data frame below**
+
+```{r}
+Cust_churn<-subset(CustomerChurn,select=-c(DtaRegUserData,DtaPresuntoParto,app_accesses_updated_at,latest_mission_created_at,latest_prize_request_date,latest_purchase))
+
+#Displaying the structure of the dataframe Cust_churn
+str(Cust_churn)
+```
+
+
+**Boxplot can give an idea of spread of data and central tendency, for example if the box is long, it indicates a large spread of data, if the box is short, it indicates a small spread of data. Additionally it can also help to identify outliers and skewness of the variable. It is useful to detect the presence of outliers and skewness, and to compare the distribution of the variable with other variables in the dataset. From the below boxplots we can see how the variables are distributed and outliers.**
+
+
+```{r}
+#creating a boxplot of the "first_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$first_interval,col = "#6495ED")
+```
+
+```{r}
+##creating a boxplot of the "second_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$second_interval,col="#FF7F50")
+```
+
+```{r}
+#creating a boxplot of the "app_access_purchase_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$app_access_purchase_interval,col="#556B2F")
+```
+
+```{r}
+#creating a boxplot of the "app_access_mission_created_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$app_access_mission_created_interval,col="#8B0000")
+```
+
+```{r}
+#creating a boxplot of the "app_access_prize_request_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$app_access_prize_request_interval,col="#483D8B")
+```
+
+```{r}
+#creating a boxplot of the "app_access_reg_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$app_access_reg_interval,col="#DAA520")
+```
+
+```{r}
+#creating a boxplot of the "purchase_prize_req_interval" column of the "Cust_churn" data frame.
+boxplot(Cust_churn$purchase_prize_req_interval,col="#F0E68C")
+```
+
+
+**Outlier Detection using decision range**
+  
+**Any data point lies outside of this range is considered as outliers. We have lower bound and upper bound. Data outside of these 2 bounds will be considered as outliers.  Here we are just going to consider the upper bound, since the outliers in the lower region doesn't churn.**
+  
+**Below formula is used to calculate the upper bound**
+
+**Upper Bound: (Q3 + 1.5 * IQR) where Q3 stands for 3rd Quartile and IQR stands for Inter Quartile Range which the spread of data in middle 50%.**
+
+**In the below structure of the data frame, _first_interval_label_ have the values have 0 and 1 which means 0 for the values within the upper bound and 1 are the outliers which were outside of upper bound**
+
+```{r}
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$first_interval, probs=c(.25, .75), na.rm = FALSE)
+
+#getting the IQR
+iqr<-IQR(Cust_churn$first_interval)
+
+#upper bound
+first_interval_ub <- quartiles[2] + 1.5*iqr 
+#first_interval_ub
+
+#now we can label the first_interval based on upper bound
+Cust_churn$first_interval_label<-as.numeric(CustomerChurn$first_interval > first_interval_ub)
+```
+
+```{r}
+#Displaying the structure of data frame Cust_churn
+str(Cust_churn)
+```
+
+**Below boxplot shows the spread of _first_interval_label_ feature only with 0 (which is under the upper bound)**
+
+```{r}
+#Creating a boxplot of the "first_interval" column of the "CustomerChurn" data frame, but only for the observations where the "first_interval_label" column is equal to 0. 
+boxplot(Cust_churn$first_interval[Cust_churn$first_interval_label==0],col="#009999")
+```
+
+
+**Below boxplot shows the spread of _first_interval_label_ feature only with 1 (which are above the upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "first_interval" column of the "CustomerChurn" data frame, but only for the observations where the "first_interval_label" column is equal to 1.
+boxplot(Cust_churn$first_interval[Cust_churn$first_interval_label==1],col="#CC3300")
+```
+```{r}
+#Making a copy of Cust_churn
+CustomerChurn_temp <-Cust_churn
+
+#Converting the 'first_interval_label' column of CustomerChurn_temp to factor datatype
+
+#Converting the 'first_interval_label' column of the CustomerChurn_temp dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the 'first_interval_label' column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp$first_interval_label <-as.factor(CustomerChurn_temp$first_interval_label)
+```
+
+**Below plot shows the faceted boxplot of _first_interval_label_ with 0 and 1**
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#creating a boxplot of the 'first_interval' column of the CustomerChurn_temp dataframe, grouped by the 'first_interval_label' column.
+ggplot(CustomerChurn_temp, aes(first_interval_label, first_interval, fill =first_interval_label)) +
+  geom_boxplot()+scale_fill_manual(values = c("0" = "#009999","1" = "#CC3300"))
+```
+
+
+**In the below structure of the data frame, _second_interval_label_ have the values have 0 and 1 which means 0 for the values within the upper bound and 1 are the outliers which were outside of upper bound**
+
+
+```{r}
+
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$second_interval, probs=c(.25, .75), na.rm = FALSE)
+#quartiles
+
+#getting the IQR
+iqr<-IQR(Cust_churn$second_interval)
+#upper bound
+second_interval_ub <- quartiles[2] + 1.5*iqr 
+#second_interval_ub
+
+#now we can label the second_interval based on upper bound
+Cust_churn$second_interval_label<-as.numeric(Cust_churn$second_interval > second_interval_ub)
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _second_interval_label_ and plotting it with respect to 0 (values under upper bound)**
+
+```{r}
+#Creating a boxplot of the "second_interval" column of the "Cust_churn" data frame, but only for the observations where the "second_interval_label" column is equal to 0.
+boxplot(Cust_churn$second_interval[Cust_churn$second_interval_label==0],col="#99cc00")
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _second_interval_label_ and plotting it with respect to 1 (values above upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "second_interval" column of the "Cust_churn" data frame, but only for the observations where the "second_interval_label" column is equal to 0.
+boxplot(Cust_churn$second_interval[Cust_churn$second_interval_label==1],col="#b37700")
+```
+
+
+**We can see how the labeled distributions which is 0 and 1, after labeling using upper bound from the below boxplot**
+
+
+```{r}
+#Making an another copy of dataframe Cust_churn
+CustomerChurn_temp2 <-Cust_churn
+
+#Converting the 'second_interval_label' column of the CustomerChurn_temp2 dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp2$second_interval_label <-as.factor(CustomerChurn_temp2$second_interval_label)
+
+#creating a boxplot of the 'second_interval' column of the CustomerChurn_temp2 dataframe, grouped by the 'second_interval_label' column.
+ggplot(CustomerChurn_temp2, aes(second_interval_label, second_interval, fill =second_interval_label)) +
+  geom_boxplot()+scale_fill_manual(values = c("0" = "#99cc00","1" = "#b37700"))
+```
+
+
+**In the below structure of the data frame, app_access_purchase_interval_label have the values have 0 and 1 which means 0 for the values within the upper bound and 1 are the outliers which were outside of upper bound**
+
+
+
+```{r}
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$app_access_purchase_interval, probs=c(.25, .75), na.rm = FALSE)
+#getting the IQR
+iqr<-IQR(Cust_churn$app_access_purchase_interval)
+
+#upper bound
+app_access_purchase_interval_ub <- quartiles[2] + 1.5*iqr 
+#app_access_purchase_interval_ub
+
+#now we can label the app_access_purchase_interval based on upper bound
+Cust_churn$app_access_purchase_interval_label<-as.numeric(Cust_churn$app_access_purchase_interval > app_access_purchase_interval_ub)
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _app_access_purchase_interval_label_ and plotting it with respect to 0 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_purchase_interval" column of the "Cust_churn" data frame, but only for the observations where the "app_access_purchase_interval_label" column is equal to 0.
+boxplot(Cust_churn$app_access_purchase_interval[Cust_churn$app_access_purchase_interval_label==0],col="#ff4da6")
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _app_access_purchase_interval_label_ and plotting it with respect to 1 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_purchase_interval" column of the "Cust_churn" data frame, but only for the observations where the "app_access_purchase_interval_label" column is equal to 1.
+boxplot(Cust_churn$app_access_purchase_interval[Cust_churn$app_access_purchase_interval_label==1],col="#669999")
+```
+
+
+**We can see how the labeled distributions which is 0 and 1, after labeling using upper bound from the below boxplot**
+
+
+```{r}
+#Making a copy of the dataframe Cust_churn
+CustomerChurn_temp3 <-Cust_churn
+
+#Converting the 'app_access_purchase_interval_label' column of the CustomerChurn_temp3 dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp3$app_access_purchase_interval_label <-as.factor(CustomerChurn_temp3$app_access_purchase_interval_label)
+
+#creating a boxplot of the 'app_access_purchase_interval' column of the CustomerChurn_temp3 dataframe, grouped by the 'app_access_purchase_interval_label' column.
+ggplot(CustomerChurn_temp3, aes(app_access_purchase_interval_label, app_access_purchase_interval, fill =app_access_purchase_interval_label)) +geom_boxplot()+scale_fill_manual(values = c("0" = "#ff4da6","1" = "#669999"))
+```
+
+
+**In the below structure of the data frame, _app_access_mission_created_interval_ have the values have 0 and 1 which means 0 for the values within the upper bound and 1 are the outliers which were outside of upper bound**
+
+
+```{r}
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$app_access_mission_created_interval, probs=c(.25, .75), na.rm = FALSE)
+
+#getting the IQR
+iqr<-IQR(Cust_churn$app_access_mission_created_interval)
+#upper bound
+mission_created_interval_ub <- quartiles[2] + 1.5*iqr 
+#mission_created_interval_ub
+
+#now we can label for app_access_mission_created_interval based on the upper bound
+Cust_churn$mission_created_interval_label<-as.numeric(Cust_churn$app_access_mission_created_interval > mission_created_interval_ub)
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _mission_created_interval_label_ and plotting it with respect to 0 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_mission_created_interval" column of the "Cust_churn" data frame, but only for the observations where the "mission_created_interval_label" column is equal to 0.
+boxplot(Cust_churn$app_access_mission_created_interval[Cust_churn$mission_created_interval_label==0],col="#ff9966")
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _mission_created_interval_label_ and plotting it with respect to 1 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_mission_created_interval" column of the "Cust_churn" data frame, but only for the observations where the "mission_created_interval_label" column is equal to 1.
+boxplot(Cust_churn$app_access_mission_created_interval[Cust_churn$mission_created_interval_label==1],col="#8080ff")
+```
+
+
+**We can see how the labeled distributions which is 0 and 1, after labeling using upper bound from the below boxplot**
+
+```{r}
+#Making a copy of the dataframe Cust_churn
+CustomerChurn_temp4 <-Cust_churn
+
+#Converting mission_created_interval_clean column of CustomerChurn_temp4 dataframe to factor datatype
+
+#Converting the 'mission_created_interval_label' column of the CustomerChurn_temp dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp4$mission_created_interval_label <-as.factor(CustomerChurn_temp4$mission_created_interval_label)
+
+#creating a boxplot of the 'app_access_mission_created_interval' column of the CustomerChurn_temp4 dataframe, grouped by the 'mission_created_interval_label' column.
+ggplot(CustomerChurn_temp4, aes(mission_created_interval_label, app_access_mission_created_interval, fill =mission_created_interval_label)) +geom_boxplot()+scale_fill_manual(values = c("0" = "#ff9966","1" = "#8080ff"))
+```
+
+
+**In the below structure of the data frame, _prize_request_interval_label_ have the values have 0 and 1 which means 0 for the values within the upper bound and 1 are the outliers which were outside of upper bound**
+
+
+```{r}
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$app_access_prize_request_interval, probs=c(.25, .75), na.rm = FALSE)
+#getting the IQR
+iqr<-IQR(Cust_churn$app_access_prize_request_interval)
+#upper bound
+app_access_prize_request_interval_ub <- quartiles[2] + 1.5*iqr 
+#app_access_prize_request_interval_ub
+
+#now we can label the column app_access_prize_request_interval based on upper bound
+Cust_churn$prize_request_interval_label<-as.numeric(Cust_churn$app_access_prize_request_interval > app_access_prize_request_interval_ub)
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _prize_request_interval_label_ and plotting it with respect to 0 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_prize_request_interval" column of the "Cust_churn" data frame, but only for the observations where the "prize_request_interval_label" column is equal to 0.
+boxplot(Cust_churn$app_access_prize_request_interval[Cust_churn$prize_request_interval_label==0],col="#FF9999")
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _prize_request_interval_label_ and plotting it with respect to 1 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "app_access_prize_request_interval" column of the "Cust_churn" data frame, but only for the observations where the "prize_request_interval_label" column is equal to 1.
+boxplot(Cust_churn$app_access_prize_request_interval[Cust_churn$prize_request_interval_label==1],col="#FFFF99")
+```
+
+
+**We can see how the labeled distributions which is 0 and 1, after labeling using upper bound from the below boxplot**
+
+
+```{r}
+#Making a copy of Cust_churn
+CustomerChurn_temp5 <-Cust_churn
+
+#Converting the 'prize_request_interval_label' column of the CustomerChurn_temp5 dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp5$prize_request_interval_label <-as.factor(CustomerChurn_temp5$prize_request_interval_label)
+
+#Making a boxplot of app_access_prize_request_interval with respect to prize_request_interval_clean labels
+#creating a boxplot of the 'app_access_prize_request_interval' column of the CustomerChurn_temp5 dataframe, grouped by the 'prize_request_interval_label' column.
+ggplot(CustomerChurn_temp5, aes(prize_request_interval_label, app_access_prize_request_interval, fill =prize_request_interval_label)) +geom_boxplot()+scale_fill_manual(values = c("0" = "#FF9999","1" = "#FFFF99"))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Outlier Detection using decision range:
+#Any data point lies outside of this range is considered as outliers
+#We have lower bound and upper bound. any data outside of these 2 bounds will be considered as outliers. 
+#Here we are just going to consider to consider the upper bound, as we can't able to see any outliers in lower bound region.
+
+#Upper Bound: (Q3 + 1.5 * IQR)
+
+#Finding the Quartiles(2nd Quartile and 3rd quartile)
+quartiles <- quantile(Cust_churn$latest_app_accessed_interval, probs=c(.25, .75), na.rm = FALSE)
+
+#getting the IQR
+iqr<-IQR(Cust_churn$latest_app_accessed_interval)
+#upper bound
+latest_app_accessed_interval_ub <- quartiles[2] + 1.5*iqr 
+#latest_app_accessed_interval_ub
+
+#now we can label the latest_app_accessed_interval based on the upper bound
+Cust_churn$latest_app_accessed_interval_label<-as.numeric(Cust_churn$latest_app_accessed_interval > latest_app_accessed_interval_ub)
+```
+
+
+**We are doing the same outlier detection using the upper bound as we performed above for _latest_app_accessed_interval_ and plotting it with respect to 0 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "latest_app_accessed_interval" column of the "Cust_churn" data frame, but only for the observations where the "latest_app_accessed_interval_label" column is equal to 0.
+boxplot(Cust_churn$latest_app_accessed_interval[Cust_churn$latest_app_accessed_interval_label==0],col="#5ca329")
+```
+
+**We are doing the same outlier detection using the upper bound as we performed above for _latest_app_accessed_interval_ and plotting it with respect to 1 (values under upper bound)**
+
+
+```{r}
+#Creating a boxplot of the "latest_app_accessed_interval" column of the "Cust_churn" data frame, but only for the observations where the "latest_app_accessed_interval_label" column is equal to 1.
+boxplot(Cust_churn$latest_app_accessed_interval[Cust_churn$latest_app_accessed_interval_label==1],col="#ff8200")
+```
+
+
+**We can see how the labeled distributions which is 0 and 1, after labeling using upper bound from the below boxplot**
+
+
+```{r}
+#Making a copy of dataframe Cust_churn
+CustomerChurn_temp6 <-Cust_churn
+
+#Converting the 'latest_app_accessed_interval_label' column of the CustomerChurn_temp6 dataframe to a factor data type. Factors are used in R to store categorical variables. By converting the column to a factor data type, the data in that column can be treated as categorical data, and it can be used for further analysis and visualization. This is useful for businesses as it can help them to group their customers based on the time intervals, and make the data more readable and understandable. This could allow them to identify patterns or trends in customer behavior, and make more informed decisions about how to engage with and retain customers.
+CustomerChurn_temp6$latest_app_accessed_interval_label <-as.factor(CustomerChurn_temp6$latest_app_accessed_interval_label)
+
+#creating a boxplot of the 'latest_app_accessed_interval' column of the CustomerChurn_temp6 dataframe, grouped by the 'latest_app_accessed_interval_label' column.
+ggplot(CustomerChurn_temp6, aes(latest_app_accessed_interval_label, latest_app_accessed_interval, fill =latest_app_accessed_interval_label)) +geom_boxplot()+scale_fill_manual(values = c("0" = "#5ca329","1" = "#ff8200"))
+```
+
+```{r}
+#Checking the column names of the dataframe Cust_churn
+names <- colnames(Cust_churn)
+#names
+```
+
+**The next step for target column build is to sum the values from the labelled columns which we have generated using upper bound. Sum of the values will be stored into the new column to build the target column which is used to analyze customer(mums) churn. Simply we are building the target column based on total number of times mums has exceeded the upper bound threshold for different intervals. In the below structure we can see that the newly added result column which have the sum of the intervals.**
+
+
+```{r}
+#Getting the sum of columns that we have labelled using upperbound to use it to make the target column
+
+#creating a new column in the CustomerChurn_temp dataframe, which is a sum of all the columns that were previously labeled using upperbound. This new column can be used to build target column to analyze customer churn. The target column represents the total number of times a customer has exceeded the upperbound threshold for different intervals
+results  <-  rowSums(Cust_churn[,21:26])
+Cust_churn <-  cbind(Cust_churn, results)
+#Printing the column names after combining the dataframes
+str(Cust_churn)
+```
+
+
+**Below histogram is just the representation of sum of the values in results columns, which is the total values of all the intervals, so we have 0,1,2,3 & 4.**
+
+```{r}
+#Plotting the histogram of the results column of Cust_churn dataframe
+#this can help to understand the patterns of customer behavior in terms of how many time they exceed the upperbound threshold.
+hist(Cust_churn$results,col = viridis(5))
+```
+
+
+**From the above histogram we can see that we have values from 0 to 4, we already know that 0 is the customers(mums) who are under the upper bound, and 1 is the observations over the upper bound and While summing all the interval columns we are getting 1,2,3,4 when getting 1 from one or more interval columns. So we are converting the values which is more than 0 to 1. As a result, we will get only 0 and 1 and generating the new variable for target column named as _Churn_ and storing the resultant values (0 and 1) in the _churn_ column. In this way we have generated out target column to predict the customer(mums) churning. In the below structure of the data frame, we can see our new __Churn__ variable with numerical values 0 and 1**
+
+```{r}
+#creating a new column called "Churn" in the Cust_churn dataframe, it assigns a value of 1 if the value in the "results" column is not equal to 0, otherwise it assigns a value of 0. It is essentially creating a binary label column (Churn or Not Churn) based on whether the customer has exceeded the upperbound threshold or not.
+Cust_churn$Churn<-as.numeric(Cust_churn$results!=0)
+#Displaying the structure of the dataframe Cust_churn
+str(Cust_churn)
+```
+
+
+**Below are some of the histograms which is the representation of how the intervals are distributed and we can see that 0 (values under upper bound) have high observations compared with 1(values over upper bound).
+
+
+```{r}
+# Creating faceted histograms of different intervals grouped by their labels
+
+ggplot(Cust_churn, aes(x = first_interval, fill = first_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ first_interval_label) +
+  ggtitle("First interval") +
+  xlab("First Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+
+ggplot(Cust_churn, aes(x = second_interval, fill = second_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ second_interval_label) +
+  ggtitle("second Interval") +
+  xlab("Second Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_purchase_interval, fill = app_access_purchase_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ app_access_purchase_interval_label) +
+  ggtitle("app access purchase interval") +
+  xlab("App Access Latest Purchase Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_mission_created_interval, fill = mission_created_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ mission_created_interval_label) +
+  ggtitle("Mission Created Interval") +
+  xlab("App Access Latest Mission Created Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_prize_request_interval, fill = prize_request_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ prize_request_interval_label) +
+  ggtitle("Prize Request Interval") +
+  xlab("App Access Prize Request Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = latest_app_accessed_interval, fill = latest_app_accessed_interval_label)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ latest_app_accessed_interval_label) +
+  ggtitle("Latest App Accessed Interval") +
+  xlab("Latest App Access Interval") +
+  ylab("Frequency")
+```
+```{r}
+# Creating faceted histograms of different intervals grouped by target column Churn
+
+ggplot(Cust_churn, aes(x = first_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("First Interval") +
+  xlab("First Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = second_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("Second Interval") +
+  xlab("Second Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_purchase_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("App Access Purchase Interval") +
+  xlab("App Access Purchase Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_mission_created_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("Latest Mission Created Interval") +
+  xlab("Accessi latest mission created interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_prize_request_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("App Access Prize Request Interval") +
+  xlab("App Access Prize Request Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = app_access_reg_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("App Access Registration Interval") +
+  xlab("App Access Registration Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = purchase_prize_req_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("Latest Purchase Prize Request Interval") +
+  xlab("Latest purchase prize request Interval") +
+  ylab("Frequency")
+```
+
+```{r}
+ggplot(Cust_churn, aes(x = latest_app_accessed_interval, fill = Churn)) +
+  geom_histogram(position = "dodge", binwidth = 5) +
+  facet_wrap(~ Churn) +
+  ggtitle("Latest App Access Interval") +
+  xlab("Latest App Accessed Interval") +
+  ylab("Frequency")
+```
+
+
+
+```{r}
+# histogram to visualize the distribution of the "first_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$first_interval, breaks=100, col="#800080",border="white")
+```
+
+```{r}
+# histogram to visualize the distribution of the "second_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$second_interval, breaks=100, col="#8B0000",border="white")
+```
+
+```{r}
+# histogram to visualize the distribution of the "app_access_purchase_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$app_access_purchase_interval, breaks=100, col="#006400",border="white")
+```
+
+```{r}
+# histogram to visualize the distribution of the "app_access_mission_created_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$app_access_mission_created_interval, breaks=100, col="#00008B",border="white")
+```
+
+```{r}
+# histogram to visualize the distribution of the "app_access_prize_request_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$app_access_prize_request_interval, breaks=100, col="#B8860B",border="white")
+```
+
+```{r}
+# histogram to visualize the distribution of the "app_access_reg_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$app_access_reg_interval, breaks=100, col="#2F4F4F",border="white")
+
+```
+
+```{r}
+# histogram to visualize the distribution of the "purchase_prize_req_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$purchase_prize_req_interval, breaks=100, col="#500000",border="white")
+
+```
+
+```{r}
+# histogram to visualize the distribution of the "latest_app_accessed_interval" column of the "Cust_churn" data frame. 
+hist(Cust_churn$latest_app_accessed_interval, breaks=100, col="#FF3300",border="white")
+```
+
+```{r}
+#Looking at the names of the Cust_churn dataframe
+colnames(Cust_churn)
+```
+
+**Below histrograms shows the visualized form of all the intervals which we have created and we can see the distribution of the data from the below histograms.**
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+fig1 <- plot_ly(x=Cust_churn$first_interval,type="histogram",name="first_interval")
+fig2 <- plot_ly(x=Cust_churn$second_interval,type="histogram",name="second_interval") 
+fig3 <- plot_ly(x=Cust_churn$app_access_purchase_interval,type="histogram",name="app_access_purchase_interval") 
+fig4 <- plot_ly(x=Cust_churn$app_access_mission_created_interval,type="histogram",name="app_access_mission_created_interval") 
+fig5 <- plot_ly(x=Cust_churn$app_access_prize_request_interval,type="histogram",name="app_access_prize_request_interval") 
+fig6 <- plot_ly(x=Cust_churn$app_access_reg_interval,type="histogram",name="app_access_reg_interval") 
+fig7 <- plot_ly(x=Cust_churn$purchase_prize_req_interval,type="histogram",name="purchase_prize_req_interval") 
+fig8 <- plot_ly(x=Cust_churn$latest_app_accessed_interval,type="histogram",name="latest_app_accessed_interval") 
+fig <- subplot(fig1, fig2, fig3, fig4, fig5, fig6, fig7,fig8, nrows = 4) %>% 
+  layout(title = list(text = "Histograms of different time gaps"),
+         plot_bgcolor='#e5ecf6', 
+         xaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff'), 
+         yaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff')) 
+fig
+#Looking at the histogram of different time intervals together in order to understand the pattern
+
+#To make the histogram more meaningful,adding time interval columns from the "Cust_churn" data frame and comparing them in the same histogram. This would allow for a more comprehensive understanding of the distribution of time intervals across different columns and potentially identify any correlations or patterns between them. Additionally, adding labels and a title to the histogram would make it more interpretable for others viewing the visualization.
+```
+
+```{r}
+#Taking the rows having the Churn as 1 into Churn_y dataframe
+Churn_y= Cust_churn[Cust_churn$Churn==1,]
+```
+
+```{r}
+#Plotting the histogram of the first_interval for Churn label 1
+hist(Churn_y$first_interval, breaks=100, col="maroon",border="gray")
+```
+
+```{r}
+#Plotting the histogram of the second_interval for Churn label 1
+hist(Churn_y$second_interval, breaks=100, col="#006400",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_purchase_interval for Churn label 1
+hist(Churn_y$app_access_purchase_interval, breaks=100, col="#000080",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_mission_created_interval for Churn label 1
+hist(Churn_y$app_access_mission_created_interval, breaks=100, col="#556B2F",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_prize_request_interval for Churn label 1
+hist(Churn_y$app_access_prize_request_interval, breaks=100, col="#800000",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_reg_interval for Churn label 1
+hist(Churn_y$app_access_reg_interval, breaks=100, col="#A0522D",border="white")
+
+```
+
+```{r}
+#Plotting the histogram of the purchase_prize_req_interval for Churn label 1
+hist(Churn_y$purchase_prize_req_interval, breaks=100, col="#FF0000",border="white")
+
+```
+
+```{r}
+#Plotting the histogram of the latest_app_accessed_intervalfor Churn label 1
+hist(Churn_y$latest_app_accessed_interval, breaks=100, col="#9400D3",border="white")
+```
+
+
+**Below histrograms shows the visualized form of all the intervals with respect to churn label 1, and we can see the distribution of the data from the below histograms.**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+fig1 <- plot_ly(x=Churn_y$first_interval,type="histogram",name="first_gap")
+fig2 <- plot_ly(x=Churn_y$second_interval,type="histogram",name="second_gap") 
+fig3 <- plot_ly(x=Churn_y$app_access_purchase_interval,type="histogram",name="app_access_purchase_interval") 
+fig4 <- plot_ly(x=Churn_y$app_access_mission_created_interval,type="histogram",name="app_access_mission_created_interval") 
+fig5 <- plot_ly(x=Churn_y$app_access_prize_request_interval,type="histogram",name="app_access_prize_request_interval") 
+fig6 <- plot_ly(x=Churn_y$app_access_reg_interval,type="histogram",name="app_access_reg_interval") 
+fig7 <- plot_ly(x=Churn_y$purchase_prize_req_interval,type="histogram",name="purchase_prize_req_interval") 
+fig8 <- plot_ly(x=Churn_y$latest_app_accessed_interval,type="histogram",name="latest_app_accessed_interval") 
+fig <- subplot(fig1, fig2, fig3, fig4, fig5, fig6, fig7,fig8, nrows = 4) %>% 
+  layout(title = list(text = "Histograms of different time gaps"),
+         plot_bgcolor='#e5ecf6', 
+         xaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff'), 
+         yaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff')) 
+fig
+
+#To make the histogram more meaningful,adding time interval columns from the "Cust_churn" data frame and comparing them in the same histogram. This would allow for a more comprehensive understanding of the distribution of time intervals across different columns and potentially identify any correlations or patterns between them. Additionally, adding labels and a title to the histogram would make it more interpretable for others viewing the visualization.
+#Here we have data having Churn label 1
+```
+
+```{r}
+#Taking the rows from the dataframe Cust_churn having the Churn label 0
+Churn_a= Cust_churn[Cust_churn$Churn==0,]
+
+```
+
+```{r}
+#Plotting the histogram of the first_interval for Churn label 0
+hist(Churn_a$first_interval, breaks=100, col="#800080",border="white")
+```
+
+```{r}
+#Plotting the histogram of the second_interval for Churn label 0
+hist(Churn_a$second_interval, breaks=100, col="#483D8B",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_purchase_interval for Churn label 0
+hist(Churn_a$app_access_purchase_interval, breaks=100, col="#FF0000",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_mission_created_interval for Churn label 0
+hist(Churn_a$app_access_mission_created_interval, breaks=100, col="#FFD700",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_prize_request_interval for Churn label 0
+hist(Churn_a$app_access_prize_request_interval, breaks=100, col="#32CD32",border="white")
+```
+
+```{r}
+#Plotting the histogram of the app_access_reg_interval for Churn label 0
+hist(Churn_a$app_access_reg_interval, breaks=100, col="#556B2F",border="white")
+```
+
+```{r}
+#Plotting the histogram of the latest_app_accessed_interval for Churn label 0
+hist(Churn_a$latest_app_accessed_interval, breaks=100, col="#8B4513",border="white")
+```
+
+
+**Below histrograms shows the visualized form of all the intervals with respect to churn label 0, and we can see the distribution of the data from the below histograms.**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+fig1 <- plot_ly(x=Churn_a$first_interval,type="histogram",name="first_gap")
+fig2 <- plot_ly(x=Churn_a$second_interval,type="histogram",name="second_gap") 
+fig3 <- plot_ly(x=Churn_a$app_access_purchase_interval,type="histogram",name="app_access_purchase_interval") 
+fig4 <- plot_ly(x=Churn_a$app_access_mission_created_interval,type="histogram",name="app_access_mission_created_interval") 
+fig5 <- plot_ly(x=Churn_a$app_access_prize_request_interval,type="histogram",name="app_access_prize_request_interval") 
+fig6 <- plot_ly(x=Churn_a$app_access_reg_interval,type="histogram",name="app_access_reg_interval") 
+fig7 <- plot_ly(x=Churn_a$purchase_prize_req_interval,type="histogram",name="purchase_prize_req_interval") 
+fig8 <- plot_ly(x=Churn_a$latest_app_accessed_interval,type="histogram",name="latest_app_accessed_interval") 
+fig <- subplot(fig1, fig2, fig3, fig4, fig5, fig6, fig7,fig8, nrows = 4) %>% 
+  layout(title = list(text = "Histograms of different time gaps"),
+         plot_bgcolor='#e5ecf6', 
+         xaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff'), 
+         yaxis = list( 
+           zerolinecolor = '#ffff', 
+           zerolinewidth = 3, 
+           gridcolor = 'ffff')) 
+fig
+#To make the histogram more meaningful,adding time interval columns from the "Cust_churn" data frame and comparing them in the same histogram. This would allow for a more comprehensive understanding of the distribution of time intervals across different columns and potentially identify any correlations or patterns between them. Additionally, adding labels and a title to the histogram would make it more interpretable for others viewing the visualization.
+#Here we have data having Churn label 0
+```
+
+
+**Below plot shows the proportion of the non churn customers(mums) wiht respect to the respect to the region and we can see that _Lombardia_, _Sicilia_ and _Campania_ are the top three regions which have non churn customers(mums).**
+
+
+```{r}
+
+#grouping the dataframe "Churn_a" by the column "Regione" and then summarizing the number of occurrences (n()) of each value in the column "total_churn" for each group.
+region_non_churn <- Churn_a %>% group_by(Regione)  %>%
+  summarise(total_churn = n())
+
+#new data frame "count.data2" is being created. The data frame contains three columns: "region", "n", and "proportion". 
+count.data2 <- data.frame(
+  region = region_non_churn$Regione,
+  n = region_non_churn$total_churn,
+  proportion =round(100*region_non_churn$total_churn/sum(region_non_churn$total_churn), 1)
+)
+
+#Rearranging and adding a new column "lab.ypos" calculated by cumulatively summing the proportion column and subtracting 0.6 times proportion from it.
+count.data2 <-count.data2 %>%
+  arrange(desc(proportion)) %>%
+  mutate(lab.ypos = cumsum(proportion) - 0.6*proportion)
+
+#plotting a bar chart showing the proportion of non-churn customers by region, with the proportion labeled on each bar and the x-axis labeled with the region names and angled for better readability.
+ggplot(count.data2, aes(x=region,y=proportion,fill=proportion)) +    
+  geom_bar(stat = "identity") + 
+  ggtitle("Proportion of non churn region wise")+
+  geom_col() +
+  geom_text(aes(label = proportion), vjust = -0.2)+
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**Below is the correlation matrix table for the interval columns**
+
+
+```{r}
+# calculating the correlation matrix of the columns 12, 13, 15, 16, 17, 18, 19 and 20 in the dataframe "Cust_churn" and storing it in M
+M <-cor(Cust_churn[,c(12,13,15,16,17,18,19,20)])
+M
+```
+
+
+**Below heatmap represents the correlation between the intervals, and we can clearly see that _purchase_prize_request_interval_ have strong correlation with app_access_prize_request_interval with 0.85**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+# plotting corr heatmap of M
+ggcorrplot::ggcorrplot(M,lab=TRUE,colors = c("#008000", "white", "#FF8C00"))
+```
+
+
+**As _purchase_prize_request_interval_ have strong correlation with _app_access_prize_request_interval_, we don't need to keep both the features to our analysis further, because its redundant. So removing the _purchase_prize_request_interval_ and below structure shows the current structure of the data frame.**
+
+
+```{r}
+#We can see from the correlation analysis that accessi prize request gap and latest purchase prize req gap are highly correlated
+
+CustoChurn<-subset(Cust_churn,select=-c(purchase_prize_req_interval))
+#Converting the Churn column of CustoChurn to factor datatype
+CustoChurn$Churn <- as.factor(CustoChurn$Churn)
+
+#Displaying the structure of the dataframe CustoChurn
+str(CustoChurn)
+```
+
+
+**Below boxplot represents the ETA_MM_BambinoTODAY(babies current age) with respect to churn(1) and non churn(0). It clearly shows that active customers(mums) are becoming churn if the babies crossed the age where there will be necessary for product(pampers).**
+
+
+```{r}
+#Plotting the boxplot of Churn,ETA_MM_BambinoTODAY grouped by Churn label
+ggplot(CustoChurn, aes(Churn,ETA_MM_BambinoTODAY, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#A0522D","1" = "#808000"))
+```
+
+
+**Below boxplot represents the total_updates(updates or accessed by mums) with respect to churn(1) and non churn(0). We can see that total updates is higher for non churn(0) customers(mums) and same is less for churn(1) customers(mums).**
+
+
+```{r fig.height=3}
+#Plotting the boxplot of total_updates grouped by Churn label
+ggplot(CustoChurn, aes(Churn,total_updates, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#B80000","1" = "#9933FF"))
+```
+
+
+**Below boxplot represents the total_gained_points with respect to churn(1) and non churn(0). We can see that total points is higher for non churn(0) customers(mums) and same is less for churn(1) customers(mums).**
+
+
+```{r}
+#Plotting the boxplot of total_gained_points grouped by Churn label
+ggplot(CustoChurn, aes(Churn,total_gained_points, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#006666","1" = "#00CC00"))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Plotting the boxplot of total_gifts_requested grouped by Churn label
+ggplot(CustoChurn, aes(Churn,total_gifts_requested , fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#B80000","1" = "#9933FF"))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Plotting the boxplot of latest_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(Churn,latest_prizes_requested, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#9933ff","1" = "#ff6666"))
+```
+
+
+**Below boxplot represents the latest_prizes_request_points with respect to churn(1) and non churn(0). We can see that the total points spent to request the prize by non churn(0) customers(mums) is high when compare to points spent to request prize by churn(1) customers(mums)**
+
+
+```{r}
+#Plotting the boxplot of latest_prizes_request_points grouped by Churn label
+ggplot(CustoChurn, aes(Churn,latest_prizes_request_points, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#ff6666","1" = "#b38f00"))
+```
+
+
+**Below boxplot represents the basic_prizes_requested with respect to churn(1) and non churn(0). We can see that there are no basic prize request from churn(1) customers(mums)**
+
+
+```{r}
+#Plotting the boxplot of basic_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(Churn,basic_prizes_requested , fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#80ff00","1" = "#ff4d94"))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Plotting the boxplot of gift_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(Churn,gift_prizes_requested , fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#0080ff","1" = "#77773c"))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Plotting the boxplot of special_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(Churn,special_prizes_requested, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#B80000","1" = "#9933FF"))
+```
+
+
+**Below boxplot represents the total_products bought by customers(mums) with respect to churn(1) and non churn(0). We can see that there are more products bought by non churn(0) when comparing to churn(1) customers(mums)**
+
+
+```{r}
+#Plotting the boxplot of total_products grouped by Churn label
+ggplot(CustoChurn, aes(Churn,total_products, fill =Churn))+geom_boxplot()+scale_fill_manual(values = c("0" = "#B80000","1" = "#663366"))
+```
+
+
+**qq plot is a probability plot, a graphical method for comparing two probability distributions by plotting them each other. Here the two probabilities are churn(1) and non churn(0) with respect to present age of babies and we can see both distributions are skewed left**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of ETA_MM_BambinoTODAY grouped by Churn label
+ggplot(CustoChurn, aes(sample=ETA_MM_BambinoTODAY, color=Churn ,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Present Age of Child",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#008000', '#800000'))
+
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = ETA_MM_BambinoTODAY,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#008000","1" = "#800000"))
+```
+
+
+**qq plot is a probability plot, a graphical method for comparing two probability distributions by plotting them each other. Here the two probabilities are churn(1) and non churn(0) with respect to total updates and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of total_updates grouped by Churn label
+ggplot(CustoChurn, aes(sample=total_updates, color =Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Total Updates",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#191970', '#6B8E23'))
+
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = total_updates,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#191970","1" = "#6B8E23"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to total_gained_points and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of total_gained_points grouped by Churn label
+ggplot(CustoChurn, aes(sample=total_gained_points, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Total Points Of Customer",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#800080', '#40E0D0'))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = total_gained_points,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#800080","1" = "#40E0D0"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to total_gifts_requested and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of total_gifts_requested grouped by Churn label
+ggplot(CustoChurn, aes(sample=total_gifts_requested , color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Total Prizes Requested",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#8B0000', '#DAA520'))
+```
+
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = total_gifts_requested,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#8B0000","1" = "#DAA520"))
+
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to latest_prizes_requested and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of latest_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(sample=latest_prizes_requested, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Latest Prizes Requested",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#C71585', '#FFD700'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = latest_prizes_requested,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#C71585","1" = "#FFD700"))
+```
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to latest_prizes_request_points and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of latest_prizes_request_points grouped by Churn label
+ggplot(CustoChurn, aes(sample=latest_prizes_request_points, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Points Required for Latest Prize Request",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#006400', '#CD853F'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = latest_prizes_request_points,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#006400","1" = "#CD853F"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to basic_prizes_requested and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of basic_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(sample=basic_prizes_requested , color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Prizes Requested(Basic)",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#800000', '#2F4F4F'))
+```
+
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = basic_prizes_requested,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#800000","1" = "#2F4F4F"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to gift_prizes_requested and we can see both distributions are skewed right**
+
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of gift_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(sample=gift_prizes_requested , color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Prizes Requested(Gift)",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#6633FF', '#99CC00'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = gift_prizes_requested,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#6633FF","1" = "#99CC00"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to special_prizes_requested and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of special_prizes_requested grouped by Churn label
+ggplot(CustoChurn, aes(sample=special_prizes_requested, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Prizes Requested(Special)",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#FF0000', '#6600CC'))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = special_prizes_requested,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#FF0000","1" = "#6600CC"))
+```
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to first_interval and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of first_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=first_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Purchase Interval(Very latest)",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#339966', '#ff9900'))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = first_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#339966","1" = "#ff9900"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to second_interval and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of second_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=second_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Purchase Interval(Second Latest)",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#0000ff', '#80ff00'))
+```
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = second_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#0000ff","1" = "#80ff00"))
+```
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to app_access_purchase_interval and we can see both distributions are skewed right**
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of app_access_purchase_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=app_access_purchase_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="App Access - Latest Purchase Interval",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#000080', '#006400'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = app_access_purchase_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#000080","1" = "#006400"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to app_access_mission_created_interval and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of app_access_mission_created_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=app_access_mission_created_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="App Access - Mission Created Interval",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#1E90FF', '#20B2AA'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = app_access_mission_created_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#1E90FF","1" = "#20B2AA"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to app_access_prize_request_interval and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of app_access_prize_request_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=app_access_prize_request_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="App Access - Prize Request Interval",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#191970', '#580000'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = app_access_prize_request_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#191970","1" = "#580000"))
+```
+
+
+**Here the two probabilities are churn(1) and non churn(0) with respect to latest_app_accessed_interval and we can see both distributions are skewed right**
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking for normality
+#qq plot of latest_app_accessed_interval grouped by Churn label
+ggplot(CustoChurn, aes(sample=latest_app_accessed_interval, color=Churn,shape=Churn))+stat_qq()+stat_qq_line()+labs(title="Latest App Accessed Interval",x="theoretical quantiles",y="sample quantiles")+theme_classic()+scale_color_manual(values=c('#556B2F', '#8A2BE2'))
+```
+
+
+```{r fig.width=4.5 ,fig.height = 4,out.width='100%', fig.align='center'}
+ggplot(CustoChurn, aes(x = latest_app_accessed_interval,fill=Churn)) + 
+  geom_histogram(alpha = 0.9, position = "identity",color="white")+
+  guides(fill = guide_legend(title = "Churn"))+scale_fill_manual(values = c("0" = "#556B2F","1" = "#8A2BE2"))
+```
+
+
+```{r}
+#Printing the column names in the current dataframe CustoChurn
+#colnames(CustoChurn)
+```
+
+**Converting the _Provincia_ and _Regione_ to factor, before using those for categorical analysis and below is the current structure of the data frame**
+
+
+```{r}
+# subsetting the dataframe "CustoChurn" by removing the columns "first_interval_clean", "second_interval_clean", "app_access_purchase_interval_clean", "mission_created_interval_clean", "prize_request_interval_clean", "latest_app_accessed_interval_clean", "results" and creating a new dataframe called "Processed_Customers_dt" with the remaining columns.
+Processed_Customers_dt <- subset(CustoChurn,select=-c(first_interval_label,second_interval_label,app_access_purchase_interval_label,mission_created_interval_label,prize_request_interval_label,latest_app_accessed_interval_label,results))
+
+#Converting the Provincia column of Processed_Customers_dt as a factor datatype
+#By converting "Provincia" to a factor, it can be used for categorical analysis
+Processed_Customers_dt$Provincia <-as.factor(Processed_Customers_dt$Provincia)
+
+#Converting the Regione column of Processed_Customers_dt as a factor datatype
+#By converting "Regione" to a factor, it can be used for categorical analysis
+Processed_Customers_dt$Regione <-as.factor(Processed_Customers_dt$Regione)
+
+#Displaying the structure of the dataframe Processed_Customers_dt
+str(Processed_Customers_dt)
+```
+
+
+**Below bar plot shows us the frequency with respect to provinces**
+
+
+```{r}
+
+#Checking the Frequency of Each Provinces.
+Processed_Customers_Provincia_freq  = as.data.frame(table(Processed_Customers_dt$Provincia))
+
+#Arranging the dataframe in decreasing order of frequency
+Processed_Customers_Provincia_freq<-Processed_Customers_Provincia_freq[order(Processed_Customers_Provincia_freq$Freq,decreasing = TRUE),]
+#Renaming the column names
+colnames(Processed_Customers_Provincia_freq)<-c("Provincia","Frequency")
+
+#Plotting the bar plot of Provincia vs Frequency
+ggplot(Processed_Customers_Provincia_freq, aes(Provincia,Frequency,)) +    
+  geom_bar(stat = "identity",color="White",fill="#8B008B") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**Below bar plot shows us the frequency with respect to region**
+
+
+```{r fig.width=5 ,fig.height = 3.9,out.width='100%', fig.align='center'}
+#Checking the Frequency of Each Region
+Processed_Customers_Regione_freq  = as.data.frame(table(Processed_Customers_dt$Regione))
+
+#Arranging the dataframe in decreasing order of frequency
+Processed_Customers_Regione_freq<-Processed_Customers_Regione_freq[order(Processed_Customers_Regione_freq$Freq,decreasing = TRUE),]
+
+#Renaming the column names of the dataframe
+colnames(Processed_Customers_Regione_freq)<-c("Regione","Frequency")
+
+#Plotting bar chart of the Regione vs Frequency
+ggplot(Processed_Customers_Regione_freq, aes(Regione,Frequency,fill=Regione)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+
+```
+
+
+```{r}
+#Displaying the columns of the dataframe Processed_Customers_dt
+#colnames(Processed_Customers_dt)
+```
+
+**The ggpairs() function is used to explore the relationships between variables in a data frame, and identifying patterns and outliers. It can also help to identify variables that are highly correlated, which can be useful for feature selection and dimentionality reduction.**
+
+```{r fig.width=6 ,fig.height = 3,out.width='100%', fig.align='center'}
+#Plotting a pairwise plot
+p <- ggpairs(Processed_Customers_dt, columns =c(1,4,5,6,7,8,9,10,11,14), ggplot2::aes(colour=Churn))
+p
+```
+
+
+
+
+```{r}
+#the dataframe "Processed_Customers_dt" is being grouped by the "Regione" column, and for each group, the sum of the values in the "total_gifts_requested", "total_products", and "total_gained_points" columns is being calculated. The resulting dataframe is then saved as "Processed_Customers_grp_region" and the original group column is dropped.
+Processed_Customers_grp_region = Processed_Customers_dt %>% group_by(Regione) %>%
+  summarise(total_prizes_req = sum(total_gifts_requested),
+            total_products = sum(total_products),total_points=sum(total_gained_points),
+            .groups = 'drop')
+#Displaying the structure of the dataframe Processed_Customers_grp_region
+str(Processed_Customers_grp_region)
+```
+
+
+
+**By exploring the above we can check which regione have how many number of prize requests,number of total products and total points of all customers region wise. Below plot shows the total prize requested by the customers(mums) with respect to regions. As per the plot, we can see that _Lombardia_ is the region where high range of customers have requested prize.**
+
+```{r fig.width=6 ,fig.height = 4,out.width='100%', fig.align='center'}
+# Plotting the bar chart of region wise total prizes requested
+ggplot(Processed_Customers_grp_region, aes(x=total_prizes_req,y=Regione,fill=Regione)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+**Below plot shows the total points of the customers(mums) with respect to the region. In the above plot the prize request is in high range in _Lombardia_, so logically if customer have to request prize, they should be with points, as the prize request have high in _Lombardia_ from above plot, likewise _Lambardia- is the region where customers(mums) have high range of total points**
+
+
+```{r fig.width=5.5 ,fig.height = 3,out.width='100%', fig.align='center'}
+# Ploting the bar chart of region wise total points
+ggplot(Processed_Customers_grp_region, aes(total_points,Regione,fill=Regione)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**Below plot shows the total products purchased by the customers(mums) with respect to the region, and from the plot we can see that the customers(mums) who were living in _Sicilia_ region are frequently buying the product or we can also say that, company's sales in that particular product(pampers) is selling with good range in _Sicilia_ region.**
+
+```{r fig.width=5.5 ,fig.height = 3,out.width='100%', fig.align='center'}
+# Plotting the bar chart of region wise total products
+ggplot(Processed_Customers_grp_region, aes(total_products,Regione,fill=Regione)) +    
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+```{r}
+#grouping the dataframe "Processed_Customers_dt" by the column "Provincia" and then summarizing it by calculating the sum of the columns "total_gifts_requested", "total_products", and "total_gained_points" and creating a new dataframe "Processed_Customers_provincia" with the summarized data, while dropping the grouping columns.
+Processed_Customers_provincia = Processed_Customers_dt %>% group_by(Provincia) %>%
+  summarise(total_prizes_req = sum(total_gifts_requested),
+            total_products = sum(total_products),total_points=sum(total_gained_points),
+            .groups = 'drop')
+#Displaying the structure of the dataframe Processed_Customers_provincia
+str(Processed_Customers_provincia)
+```
+
+**By exploring the above we can check which Provinces have how many number of prize requests,number of total products and total points of all customers Province wise. Below plot shows the total prize requested by the customers(mums) with respect to Provinces As per the plot, we can see that _Roma_ is the Provinces where high range of customers have requested prize.**
+
+
+```{r}
+# Plotting the bar chart of Provincia wise total prizes requested
+ggplot(Processed_Customers_provincia, aes(x=Provincia,y=total_prizes_req)) +    
+  geom_bar(stat = "identity",color="white",fill="#191970") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+**Below plot shows the total points of the customers(mums) with respect to the Provinces In the above plot the prize request is in high range in _Roma_, so logically if customer have to request prize, they should be with points, as the prize request have high in _Roma_ from above plot, likewise _Roma_- is the Provinces where customers(mums) have high range of total points**
+
+
+```{r}
+# Plotting the bar chart of Provincia wise total points
+ggplot(Processed_Customers_provincia, aes(Provincia,total_points)) +    
+  geom_bar(stat = "identity",color="white",fill="#006400") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+**Below plot shows the total products purchased by the customers(mums) with respect to the Provinces, and from the plot we can see that the customers(mums) who were living in _Roma_ Provinces are frequently buying the product or we can also say that, company's sales in that particular product(pampers) is selling with good range in _Roma_ Provinces.**
+
+
+```{r}
+
+# Plotting the bar chart of Provincia wise total products
+ggplot(Processed_Customers_provincia, aes(Provincia,total_products)) +    
+  geom_bar(stat = "identity",color="white",fill="#8B008B") +
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+**The Wilcoxon rank sum test is a nonparametric statistical hypothesis test that is used to compare two independent groups of data. The test is designed to determine whether the two groups have significantly different median values.
+
+The test is performed by ranking all of the data values from both groups, combining the rankings from both groups, and calculating the sum of the ranks for each group. The test statistic is then calculated as the smaller of the two sums.
+
+The null hypothesis of the Wilcoxon rank sum test is that the two groups have the same distribution, while the alternative hypothesis is that they have different distributions. The test is nonparametric, which means that it does not assume a specific population for the data.
+
+The Wilcoxon rank sum test can be used for both continuous and ordinal data, and it is a useful alternative to the t-test when the assumptions of normality and equal variances are not met.**
+
+
+
+
+```{r}
+#Conducting Mann-Whitney U Test on relevant columns
+#total_updates Mann-Whitney U Test
+wilcox.test(total_updates~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "total_updates" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 38408234, with a p-value less than 2.2e-16, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a significant difference in the medians of "total_updates" between the "Churn" and "No Churn" groups. Therefore, we can conclude that there is a statistically significant difference in the "total_updates" variable between the two groups.*
+
+
+```{r}
+#ETA_MM_BambinoTODAY Mann-Whitney U Test
+wilcox.test(ETA_MM_BambinoTODAY~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was performed to compare the "ETA_MM_BambinoTODAY" variable between two groups - "Churn" and "No Churn". The results show a test statistic W of 21717840, with a p-value less than 2.2e-16, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a statistically significant difference in the medians of "ETA_MM_BambinoTODAY" between the two groups. Therefore, it can be concluded that there is a significant difference in the "ETA_MM_BambinoTODAY" variable between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#total_points Mann-Whitney U Test
+wilcox.test(total_gained_points~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "total_gained_points" variable between two groups - "Churn" and "No Churn". The test yielded a test statistic W of 33568979, with a p-value less than 2.2e-16, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test suggests that the true location shift is not equal to zero, which means that there is a statistically significant difference in the medians of "total_gained_points" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is a significant difference in the "total_gained_points" variable between the two groups.*
+
+
+```{r}
+#total_prizes_requested Mann-Whitney U Test
+wilcox.test(total_gifts_requested~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "total_gifts_requested" variable between two groups - "Churn" and "No Churn". The test yielded a test statistic W of 25635122, with a p-value of 2.604e-07, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test suggests that the true location shift is not equal to zero, which means that there is a statistically significant difference in the medians of "total_gifts_requested" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is a significant difference in the "total_gifts_requested" variable between the two groups.*
+
+
+```{r}
+#latest_prizes_requested Mann-Whitney U Test
+wilcox.test(latest_prizes_requested~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "latest_prizes_requested" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 24003762, with a p-value of 0.0004992. The p-value is less than the significance level of 0.05, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a statistically significant difference in the medians of "latest_prizes_requested" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is a significant difference in the "latest_prizes_requested" variable between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#latest_prizes_request_points Mann-Whitney U Test
+wilcox.test(latest_prizes_request_points~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "latest_prizes_request_points" variable between two groups - "Churn" and "No Churn". The test yielded a test statistic W of 25705132, with a p-value of 5.347e-07, which is less than the significance level of 0.05, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test suggests that the true location shift is not equal to zero, which means that there is a statistically significant difference in the medians of "latest_prizes_request_points" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is a significant difference in the "latest_prizes_request_points" variable between the two groups.*
+
+
+```{r}
+#basic_prizes_requested Mann-Whitney U Test
+wilcox.test(basic_prizes_requested~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "basic_prizes_requested" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 26133563, with a p-value of 7.436e-16, which is less than the significance level of 0.05, indicating strong evidence of a significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a statistically significant difference in the medians of "basic_prizes_requested" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is a significant difference in the "basic_prizes_requested" variable between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#gift_prizes_requested Mann-Whitney U Test
+wilcox.test(gift_prizes_requested~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "gift_prizes_requested" variable between two groups - "Churn" and "No Churn". The test yielded a test statistic W of 24336928, with a p-value of 0.4148, which is greater than the significance level of 0.05, indicating insufficient evidence to reject the null hypothesis of no significant difference between the two groups. The alternative hypothesis of the test suggests that the true location shift is not equal to zero, but the p-value is not significant, so it is reasonable to assume that there is no significant difference in the medians of "gift_prizes_requested" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is no significant difference in the "gift_prizes_requested" variable between the two groups.*
+
+```{r}
+#special_prizes_requested Mann-Whitney U Test
+wilcox.test(special_prizes_requested~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "special_prizes_requested" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 24762576, with a p-value of 0.07864, which is greater than the significance level of 0.05, indicating insufficient evidence to reject the null hypothesis of no significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, but the p-value is not significant, so it is reasonable to assume that there is no significant difference in the medians of "special_prizes_requested" between the "Churn" and "No Churn" groups. Therefore, it can be concluded that there is no significant difference in the "special_prizes_requested" variable between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#first_gap Mann-Whitney U Test
+wilcox.test(first_interval~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "first_interval" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 18395718, with a very small p-value of less than 2.2e-16, which is smaller than the significance level of 0.05, indicating strong evidence to reject the null hypothesis of no significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a significant difference in the medians of the "first_interval" variable between the "Churn" and "No Churn" groups. Therefore, it can be concluded that the "first_interval" variable is significantly different between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#second_gap Mann-Whitney U Test
+wilcox.test(second_interval~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to compare the "second_interval" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 18961192, with a very small p-value of less than 2.2e-16, which is smaller than the significance level of 0.05, indicating strong evidence to reject the null hypothesis of no significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a significant difference in the medians of the "second_interval" variable between the "Churn" and "No Churn" groups. Therefore, it can be concluded that the "second_interval" variable is significantly different between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#accessi_latest_purchase_gap Mann-Whitney U Test
+wilcox.test(app_access_purchase_interval~Churn,data=Processed_Customers_dt)
+```
+*The Wilcoxon rank sum test was conducted to compare the "app_access_purchase_interval" variable between two groups - "Churn" and "No Churn". The test resulted in a test statistic W of 11727464, with a very small p-value of less than 2.2e-16, which is smaller than the significance level of 0.05, indicating strong evidence to reject the null hypothesis of no significant difference between the two groups. The alternative hypothesis of the test states that the true location shift is not equal to zero, which implies that there is a significant difference in the medians of the "app_access_purchase_interval" variable between the "Churn" and "No Churn" groups. Therefore, it can be concluded that the "app_access_purchase_interval" variable is significantly different between the "Churn" and "No Churn" groups.*
+
+
+```{r}
+#accessi_latest_created_gap Mann-Whitney U Test
+wilcox.test(app_access_mission_created_interval~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted on the variable "app_access_mission_created_interval" by "Churn". The results show that the test statistic W is 20798644 and the p-value is less than 2.2e-16. Therefore, we reject the null hypothesis that there is no difference in the distribution of "app_access_mission_created_interval" between the two groups ("Churn" and "Non-Churn"). The alternative hypothesis is that there is a true location shift, meaning the location parameter of the two groups is different.*
+
+
+```{r}
+#accessi_prize_request_gap Mann-Whitney U Test
+wilcox.test(app_access_prize_request_interval~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted to test for a difference in the distribution of app access prize request intervals between customers who churned and those who did not. The test yielded a W statistic of 27069908 and a p-value < 2.2e-16, indicating strong evidence against the null hypothesis of no difference and in favor of the alternative hypothesis that the true location shift is not equal to 0. Therefore, we can conclude that there is a significant difference in the distribution of app access prize request intervals between the two groups.*
+
+
+```{r}
+#recent_latest_accessi_gap Mann-Whitney U Test
+wilcox.test(latest_app_accessed_interval~Churn,data=Processed_Customers_dt)
+```
+
+*The Wilcoxon rank sum test was conducted on the data for the latest_app_accessed_interval variable, by Churn. The test returned a W statistic of 11849598, and a p-value of less than 2.2e-16, indicating strong evidence against the null hypothesis. The alternative hypothesis, which states that the true location shift is not equal to 0, is favored. This suggests that there is a significant difference in the latest app accessed interval between customers who churn and those who do not.*
+
+
+```{r}
+Processed_Customers_dt<- subset(Processed_Customers_dt,select=-c(gift_prizes_requested,special_prizes_requested))
+#Displaying the structure of the columns after columns removal
+str(Processed_Customers_dt)
+```
+
+**Categorical data refers to variables that are made up of label values, such as provinces, regions, churn have their own categories. Most of the machine learning models or algorithms require the input and output variables should be in numeric form, which the categorical variables should be mapped to integers. One hot encoding is one of the method of converting data to prepare it for an algorithm and get a better prediction. With one-hot, we convert each categorical value into a new categorical column and assign a binary value of 1 or 0 to those columns. Each integer value is represented as a binary vector. All the values are zero, and the index is marked with a 1. **
+
+**Below are the structure of the data frame, after the one hot encoding with Provinces and churn columns, and we can see that all the columns are with the format of integer**
+
+```{r}
+#Starting with one hot encoding for Provincia
+#Removing Regione since  Regione,Provincia and commune are in hierarchy and they map back to Regione
+Processed_Customers_encode <- subset(Processed_Customers_dt,select=-c(Regione))
+#Printing the numbe of unique Provincia
+length(unique(Processed_Customers_encode$Provincia))
+#One hot encoding the Provincia column
+newdata <- one_hot(as.data.table(Processed_Customers_encode$Provincia))
+#Converting the newdata as a dataframe
+x <- as.data.frame(Processed_Customers_encode$Churn)
+#Changing the column name of x to Churn
+colnames(x)<-"Churn"
+
+#Subsetting the Processed_Customers_encode dataframe by removing Churn,Provincia columns and storing the remaining columns in Processed_Customers_encode_01 dataframe
+Processed_Customers_encode_01 <- subset(Processed_Customers_encode,select=-c(Churn,Provincia))
+
+#Combining the dataframes Processed_Customers_encode_01,newdata
+Processed_Customers_encode_02 <- cbind(Processed_Customers_encode_01,newdata)
+
+#Adding the Churn column back to the Processed_Customers_encode_02 and storing the new dataframe in Processed_Customers_encode_03
+Processed_Customers_encode_03 <- cbind(Processed_Customers_encode_02,x)
+
+#Displaying the structure of the dataframe Processed_Customers_encode_03
+str(Processed_Customers_encode_03)
+```
+```{r}
+#Converting all the columns of Processed_Customers_encode_03 to numeric type
+Processed_Customers_encode_03 <- sapply(Processed_Customers_encode_03, as.numeric)
+```
+
+
+**While considering the feature importance, its very important to bring all the features in the same standing, we need to do scaling so that one significant number doesn’t impact the model just because of their large magnitude. Feature scaling is a method used to normalize the range of independent variables or features of data. In data processing, it is also known as data normalization and is generally performed during the data pre-processing step. For example — as we have multiple independent variables like regions, total products, time intervals,gained points; With their range as (0-1), (0-1000), and (0 - 100000) respectively, feature scaling would help them all to be in the same range, for example- centered around 0 or in the range (0,1). For example if we have 10 pack of pampers cost 10 dollers of price, we humans know that there is a difference between both pack of pampers means count of product and price means the cost of the same. But algorithm does not understand the difference, it will understand both of them as numberical integer 10. So Its important to scale all the features to specific range. Below Plots shows the comaprison of variance between the features before and after normalizaton.**
+
+
+
+```{r}
+#Checking the variance of the columns apart from one hot encoded columns before normalizing
+#For min-max normalization One hot encoded columms variance remains the same before and after normalization hence we are not checking
+# creating a data frame df
+df_p1<- Processed_Customers_encode_03[,c(1:15)]
+
+#standard deviation
+column_std<-colStdevs(df_p1)
+
+#mean
+column_mean <- colMeans(df_p1)
+
+#Creating a dataframe with standard deviation and mean
+df<-data.frame(column_mean,column_std)
+
+#Creating a ggplot object with a scatter plot of x-axis as the column names of dataframe "df_p1" and y-axis as an empty string, it has geom_point() and geom_errorbar() that shows the mean and standard deviation of the data, with a width of 0.2, and the x-axis text is rotated 45 degrees and resized to 10.
+p<-ggplot(df,aes(x=colnames(df_p1),y="")) +
+  geom_point()+
+  geom_errorbar(aes(ymin=column_mean-column_std, ymax=column_mean+column_std), width=.2,
+                position=position_dodge(0.05))+
+  theme(axis.text.x = element_text(angle = 45, size = 10))
+
+p
+```
+```{r fig.width=8 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Variance
+column_var <- colVars(df_p1)
+
+#Creating a dataframe of variances
+df_var1 <- data.frame(colnames(df_p1),column_var)
+
+#Renaming the new dataframe df_var1
+colnames(df_var1) <- c("Feature","Variance")
+
+#Arranging the df_var1 in descending order of variance
+df_var1 <-df_var1 %>%
+  arrange(desc(Variance))
+
+#Plotting Variance cutoff plot
+ggplot(data=df_var1, aes(x = reorder(Feature, -Variance), y=Variance, group=1)) +
+  geom_line()+
+  geom_point()+
+  labs(x="Feature",y="Variance before min max normalization")+
+  theme(axis.text.x = element_text(angle = 45, size = 10))
+```
+
+```{r}
+#Min max normalization
+#With Min-Max Scaling, we scale the data values between a range of 0 to 1 only. 
+#Due to this, the effect of outliers on the data values suppresses to a certain extent. 
+#Moreover, it helps us have a smaller value of the standard deviation of the data scale.
+process <- preProcess(as.data.frame(Processed_Customers_encode_03), method=c("range"))
+norm_scale <- predict(process, as.data.frame(Processed_Customers_encode_03))
+```
+
+```{r fig.width=8 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Checking the variance of the columns after min max normalization
+#Subsetting the columns 1 to 15 from norm_scale into df_p2
+df_p2<- norm_scale[,c(1:15)]
+
+#Standard deviations
+column_std2<-colStdevs(df_p2)
+
+#Means
+column_mean2 <- colMeans(df_p2)
+
+#Creating a new dataframe of standard deviations and means
+df2<-data.frame(column_mean2,column_std2)
+#Creating a ggplot object with a scatter plot of x-axis as the column names of dataframe "df_p2" and y-axis as an empty string, it has geom_point() and geom_errorbar() that shows the mean and standard deviation of the data, with a width of 0.2, and the x-axis text is rotated 45 degrees and resized to 10.
+q<-ggplot(df2,aes(x=colnames(df_p2),y="")) +
+  geom_point()+
+  geom_errorbar(aes(ymin=column_mean2-column_std2, ymax=column_mean2+column_std2), width=.2,
+                position=position_dodge(0.05))+
+  theme(axis.text.x = element_text(angle = 45, size = 10))
+
+q
+
+```
+```{r fig.width=8 ,fig.height = 4,out.width='100%', fig.align='center'}
+#Variances
+column_var2 <- colVars(df_p2)
+
+#Creating a new dataframe df_var2
+df_var2 <- data.frame(colnames(df_p2),column_var2)
+
+#Renaming the new dataframe df_var2
+colnames(df_var2) <- c("Feature","Variance")
+
+#Arranging the dataframe df_var2 in descending order of Variances
+df_var2 <-df_var2 %>%
+  arrange(desc(Variance))
+
+#Variance cutoff plot
+ggplot(data=df_var2, aes(x = reorder(Feature, -Variance), y=Variance, group=1)) +
+  geom_line()+
+  geom_point()+
+  labs(x="Feature",y="Variance after min max normalization")+
+  theme(axis.text.x = element_text(angle = 45, size = 10))
+```
+
+
+
+```{r}
+#Renaming the columns so that the future error while performing different operations will be avoided
+c_n<-as.data.frame(colnames(norm_scale))
+colnames(norm_scale)[colnames(norm_scale) == "V1_ASCOLI PICENO"] ="V1_ASCOLI_PICENO"
+colnames(norm_scale)[colnames(norm_scale) == "V1_BARLETTA-ANDRIA-TRANI"] ="V1_BARLETTA_ANDRIA_TRANI"
+colnames(norm_scale)[colnames(norm_scale) == "V1_CARBONIA-IGLESIAS"] ="V1_CARBONIA_IGLESIAS"
+colnames(norm_scale)[colnames(norm_scale) == "V1_FORLÌ-CESENA"] ="V1_FORLÌ_CESENA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_L'AQUILA"] ="V1_L_AQUILA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_LA SPEZIA"] ="V1_LA_SPEZIA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_MASSA-CARRARA"] ="V1_MASSA_CARRARA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_MEDIO CAMPIDANO"] ="V1_MEDIO_CAMPIDANO"
+colnames(norm_scale)[colnames(norm_scale) == "V1_MONZA E BRIANZA"] ="V1_MONZA_E_BRIANZA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_OLBIA-TEMPIO"] ="V1_OLBIA_TEMPIO"
+colnames(norm_scale)[colnames(norm_scale) == "V1_PESARO E URBINO"] ="V1_PESARO_E_URBINO"
+colnames(norm_scale)[colnames(norm_scale) == "V1_REGGIO CALABRIA"] ="V1_REGGIO_CALABRIA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_REGGIO EMILIA"] ="V1_REGGIO_EMILIA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_VERBANO-CUSIO-OSSOLA"] ="V1_VERBANO_CUSIO_OSSOLA"
+colnames(norm_scale)[colnames(norm_scale) == "V1_VIBO VALENTIA"] ="V1_VIBO_VALENTIA"
+
+#Writing the final norm_scale to a csv file
+write.csv(norm_scale, "Processed_Customers_dt_normalized_provinces.csv", row.names=FALSE)
+```
+
+
+**Categorical data refers to variables that are made up of label values, such as provinces, regions, churn have their own categories. Most of the machine learning models or algorithms require the input and output variables should be in numeric form, which the categorical variables should be mapped to integers. One hot encoding is one of the method of converting data to prepare it for an algorithm and get a better prediction. With one-hot, we convert each categorical value into a new categorical column and assign a binary value of 1 or 0 to those columns. Each integer value is represented as a binary vector. All the values are zero, and the index is marked with a 1. **
+
+**Below are the structure of the data frame, after the one hot encoding with Regions and churn columns, and we can see that all the columns are with the format of integer and below are the structure of the data frame after one hot encoding with regions**
+
+
+```{r} 
+#Starting with one hot encoding of Regione column
+#Removing Provinces  and using regione 
+Processed_Customers_encode_reg <- subset(Processed_Customers_dt,select=-c(Provincia))
+
+#Displaying the length of unique regions
+length(unique(Processed_Customers_encode_reg$Regione))
+
+#Creating a newdata2 of one hot encoded columns 
+newdata2 <- one_hot(as.data.table(Processed_Customers_encode_reg$Regione))
+
+#Taking the churn column into y
+y <- as.data.frame(Processed_Customers_encode_reg$Churn)
+
+#Renaming the column names of y 
+colnames(y)<-"Churn"
+
+#Subsetting the Processed_Customers_encode_reg dataframe and removed Churn,Regione
+Processed_Customers_encode_reg_01 <- subset(Processed_Customers_encode_reg,select=-c(Churn,Regione))
+
+#Combining the Processed_Customers_encode_reg_01,newdata2 dataframes
+Processed_Customers_encode_reg_02 <- cbind(Processed_Customers_encode_reg_01,newdata2)
+
+#Again joining back the Churn  column with Processed_Customers_encode_reg_02 and storing the result in Processed_Customers_encode_reg_03
+Processed_Customers_encode_reg_03 <- cbind(Processed_Customers_encode_reg_02,y)
+#Displaying the structure of the dataframe Processed_Customers_encode_reg_03
+str(Processed_Customers_encode_reg_03)
+```
+```{r}
+#Converting the Processed_Customers_encode_reg_03 column to numeric
+Processed_Customers_encode_reg_fin <- sapply(Processed_Customers_encode_reg_03, as.numeric)
+#Min max normalization
+#With Min-Max Scaling, we scale the data values between a range of 0 to 1 only. 
+#Due to this, the effect of outliers on the data values suppresses to a certain extent. 
+#Moreover, it helps us have a smaller value of the standard deviation of the data scale.
+process <- preProcess(as.data.frame(Processed_Customers_encode_reg_fin), method=c("range"))
+norm_scale_reg <- predict(process, as.data.frame(Processed_Customers_encode_reg_fin))
+
+#Writing the norm_scale_reg to a csv file
+write.csv(norm_scale_reg, "Processed_Customers_dt_normalized_regione.csv", row.names=FALSE)
+```

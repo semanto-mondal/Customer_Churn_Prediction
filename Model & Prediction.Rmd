@@ -1,0 +1,631 @@
+---
+title: "FEATURE_MODEL(R EPORT05)"
+author: "Prakash"
+date: "2023-01-18"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = '100%')
+```
+
+```{r}
+#Checking the current working directory
+#getwd()
+
+#print the list of files in the current working directory
+#print(list.files())
+
+#loading the required libraries
+library(corrplot)
+library(RColorBrewer)
+library(plyr)
+library(ggplot2)
+library("GGally")
+library(mltools)
+library(data.table)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(DALEX)
+library(ingredients)
+library(varImp)
+library(e1071)
+library(viridis)
+# For decision tree model
+library(rpart)
+# For data visualization
+library(rpart.plot)
+# Loading package
+library(caTools)
+library(ROCR) 
+library(MASS)
+library(ggcorrplot)
+library(ROCR)
+```
+
+**Reading the data frame _Processed_Customers_dt_normalized_regione.csv_ which have the pre processed features with regions and below table shows the correlation between the features.**
+```{r}
+#load the dataset Processed_Customers_dt_normalized_regione.csv into the dataframe df_norm 
+Customer_Churn_norm <- read.csv("Processed_Customers_dt_normalized_regione.csv",header=TRUE)
+
+#Checking correlation between columns of Customer_Churn_norm 
+M <- cor(Customer_Churn_norm)
+#Displaying the correlation to the output
+M
+```
+
+
+**Below heatmap represents the correlation between the features along with regions, and we are just filtering the features with correlation between 0.5 to 1 and showing them in next plot.**
+```{r}
+#Plotting heatr map of the correlation
+ggcorrplot::ggcorrplot(M,colors = c("#008000", "white", "#FF8C00"))
+```
+
+
+
+```{r}
+#Total products is highly correlated with total gained points
+#Hence removing the total_products from the dataframe
+#Customer_Churn_norm <- subset(Customer_Churn_norm,select=-c(total_products))
+
+#fitting a linear model to the data
+#fit <- lm(Churn ~ ., data=Customer_Churn_norm)
+
+#checking if the length of coefficients is greater than the rank of the model
+#If it is true then we have features in the data frame which are very highly correlated and making it rank deficient
+#length(fit$coefficients) > fit$rank
+```
+```{r}
+#Printing the summary of the fit
+#summary(fit)
+```
+
+
+**Below are the features are there after removing the total products.**
+```{r}
+#FEATURE IMPORTANCE
+
+#Printing the column names of the dataset Customer_Churn_norm
+colnames(Customer_Churn_norm)
+```
+
+**We have already done the feature importance with provinces, now we are doing the same with respect to regions.**
+
+**Analyzing the output of GLM:**
+**Here in GLM we are using Binomial Family as our outcome variables are having two categories 0 or 1. The coefficient estimate tells the average change in the log odds of the output variables with a one unit change in the predictor variable. We can see that total updates, first_interval, second_interval, total_gained_points, app_accessed_update_interval, app_access_prize_requested_interval, latest_app_access_interval are having high coefficients and the regions are not that significant. For those predictors P value is also less than 0.05 which means their impact on outcome variables are statistically significant. Null deviance tells how well the outcome variable can be predicted only using the intercept whereas residual deviance tells how well the model performs using multiple variables. The lesser the value is better. AIC values are useful when we compare multiple models. Lower the values is better. As we are not using multiple GLM model so this value is not that important to consider.**
+
+```{r}
+#Finding the Feature importance 
+#Dropping the 34th column because it is linearly related to some other column in the dataframe and making the coeffients rank deficient 
+#And storing it in Customer_Churn_norm_temp
+Customer_Churn_norm_temp <-Customer_Churn_norm[,c(1:34,36)]
+
+model_churn_glm_R <- glm(Churn ~.,data =Customer_Churn_norm_temp, family = "binomial")
+
+#printing the column names of the dataframe df_norm_temp
+colnames(Customer_Churn_norm_temp)
+
+#Building the explainer 
+#defining a new function called "explain_churn_glm_R" that takes the output from a pre-defined model called "model_churn_glm_R" and uses it to explain how the model is making predictions for a specific dataset called "Customer_Churn_norm_temp". The last column of the dataset is being used as the target variable.
+explain_churn_glm_R <- explain(model_churn_glm_R,data = Customer_Churn_norm_temp[,-c(35)],y = Customer_Churn_norm_temp[,c(35)])
+summary(model_churn_glm_R)
+```
+**Below plot shows the importance of each feature after removing the churn features. We can see that the scores are higher for the interval features, as those are the features build by our own rules. So further we will remove those feature and try to get more impact on other features.**
+```{r}
+#Getting the feature importance from the explainer
+fi_rf <- feature_importance(explain_churn_glm_R, B = 1)
+fi_rf
+#Plotting the feature importance
+plot(fi_rf)
+
+```
+
+**Feature importance using Random Forest:**
+**We have already done feature importance with random forest with respect to Provinces. Sa,e like here also the plot shows that app_access_prize_requested_interval, app_access_mission_created_interval,app_access_purchage_interval, first_interval, seconda_interval,total_prize_requested_points,total_updates,latest_app_accessed_interval,total_gift_requested are having high importance compare to others.**
+
+**From the below tree, we can see that, the model is taking only the features which we built for target building. So its clear that data leakage(Data leakage is one of the major problems in machine learning which occurs when the data that we are using to train an ML algorithm has the information the model is trying to predict.) is there, and we have to consider this and further we will remove those interval features.**
+```{r}
+# Random Forest Method
+
+#Random forest can be very effective to find a set of predictors that best 
+#explains the variance in the response variable.
+
+#Converting the Churn column to a factor data type
+Customer_Churn_norm$Churn <-as.factor(Customer_Churn_norm$Churn)
+
+#Fitting the random forest model to the data
+regressor <- randomForest(Churn ~ . , data= Customer_Churn_norm, importance=TRUE) 
+#Building the RandomForest model using another library to vizualize it
+x <- ctree(Churn ~ . , data= Customer_Churn_norm)
+plot(x, type="simple")
+```
+
+**Below are plot which shows the importance of features with respect to regions and we can see that most of the regions have negative score, which means that feature makes the loss go up. This means that the model is not getting good use of this feature.**
+```{r}
+# getting variable importance, based on mean decrease in accuracy
+## conditional=True, adjusts for correlations between predictors
+RF_feature_importance_score_R<-caret::varImp(regressor, conditional=TRUE)
+
+#Creating a new dataframe with the features and their corresponding importance scores
+feature_importance <- cbind(newColName = rownames(RF_feature_importance_score_R), RF_feature_importance_score_R$`0`)
+
+#Renaming the column names to meaningful names
+colnames(feature_importance) <- c("feature","Importance_Score")
+
+#Converting the feature_importance into a dataframe 
+feature_importance <- as.data.frame(feature_importance)
+
+#Converting the feature importance score to numeric data type
+feature_importance$Importance_Score <- as.numeric(feature_importance$Importance_Score)
+
+# Plot the bar chart of feature importance
+ggplot(feature_importance, aes(Importance_Score,feature,fill=feature)) +    
+  geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+
+```
+
+**Below are the columns which we have after removing the interval columns, as they have high score features**
+```{r}
+# Since the time interval columns are used in the target creation if they are used in target prediction then there is 
+#data leakage . It can also be seen in the feature importance scores that these columns score the highest
+#Hence we will remove those columns first
+colnames(Customer_Churn_norm)
+Customer_Churn_norm <-subset(Customer_Churn_norm,select=-c(8,9,11,12,13,14,15))
+
+#Printing the column names after removing the time interval columns used in target creation
+colnames(Customer_Churn_norm)
+```
+
+**Here we are removing the interval features, where we faced data leakage and then we are building the model again and below are importance of the feature and we can see that ETA_MM_BambinoTODAY, total_updates,total_gifts_requested,latest_prizes_requested have good score.**
+```{r}
+#Checking feature importance again after dropping the columns as seen above 
+
+#Logistic regression(glm)
+
+##Dropping the 27th column because it is linearly related to some other column in the dataframe and making the coeffients rank deficient 
+#And storing it in Customer_Churn_norm_temp2
+Customer_Churn_norm_temp2 <-Customer_Churn_norm[,c(1:27,29)]
+
+#Converting the Churn column of the datframe Customer_Churn_norm_temp2 as numeric
+Customer_Churn_norm_temp2$Churn <-as.numeric(levels(Customer_Churn_norm_temp2$Churn))[Customer_Churn_norm_temp2$Churn]
+
+
+model_churn_glm_R2 <- glm(Churn ~.,data =Customer_Churn_norm_temp2, family = "binomial")
+#The warning occurs when you fit a logistic regression model with binomial family 
+#and the predicted probabilities of one or more observations in your data frame are indistinguishable
+#from 0 or 1. It's worth noting that this is a warning message and not an error.
+#Using quasibinomial will fix the warning
+
+#Building the explainer
+#creating a new function called "explain_churn_glm_R2" which uses a pre-defined model called "model_churn_glm_R2" to explain how it makes predictions for a specific dataset called "Customer_Churn_norm_temp2" and the last column of that dataframe is being used as the target variable.
+explain_churn_glm_R2 <- explain(model_churn_glm_R2,data = Customer_Churn_norm_temp2[,-c(28)],y = Customer_Churn_norm_temp2[,c(28)])
+explain_churn_glm_R2
+summary(model_churn_glm_R2)
+```
+
+
+```{r}
+#Getting the feature importance from the explainer
+fi_rf2 <- feature_importance(explain_churn_glm_R2, B = 1)
+
+#Plotting the feature importance scores
+plot(fi_rf2)
+```
+**Building the random forest model again after removing the interval features,Now we are getting good clarity with the below tree that the model is considering all the other features, as we have already removed the interval features**
+
+
+```{r}
+# Random Forest Method
+#Random forest can be very effective to find a set of predictors that best 
+#explains the variance in the response variable.
+
+#converting the label column to factor datatype
+Customer_Churn_norm$Churn <-as.factor(Customer_Churn_norm$Churn)
+
+#Fitting the Random Forest model to the data
+regressor2 <- randomForest(Churn ~ . , data= Customer_Churn_norm, importance=TRUE) 
+
+##Building the RandomForest model using another library to vizualize it
+x <- ctree(Churn ~ . , data= Customer_Churn_norm)
+
+#Plotting the decision tree model
+plot(x, type="simple")
+```
+
+**Below plot shows the feature important score, in that we can see that except the regions sicilia and Molice, all the others regions are having negative scores and apart from that all the other features have positive score. Total updates and total products have max score totally.**
+
+```{r}
+# getting variable importance, based on mean decrease in accuracy
+# conditional=True, adjusts for correlations between predictors
+RF_feature_importance_score_R2<-caret::varImp(regressor2, conditional=TRUE) 
+
+#Creating a dataframe with the feature names and its corresponding importance score
+feature_importance2 <- cbind(newColName = rownames(RF_feature_importance_score_R2), RF_feature_importance_score_R2$`0`)
+
+#Renaming the columns to meaningful names
+colnames(feature_importance2) <- c("feature","Importance_Score")
+
+#Converting the feature_importance2 as a dataframe
+feature_importance2 <- as.data.frame(feature_importance2)
+
+#Converting the Importance_Score to numeric data type
+feature_importance2$Importance_Score <- as.numeric(feature_importance2$Importance_Score)
+
+# Plot the bar chart of features importance scores
+ggplot(feature_importance2, aes(Importance_Score,feature,fill=feature)) +    
+  geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 90, size = 10))
+```
+
+
+**From the feature importance it is evident that the region information has very less score and also negative scores, Negative feature importance value means that feature makes the loss go up.This means that our model is not getting good use of this.**
+```{r}
+#Removing the Region one-hot encoded columns(region related columns )
+colnames(Customer_Churn_norm)
+Customer_Churn_norm_s <-subset(Customer_Churn_norm,select=-c(9:28))
+
+#Printing the name of the columns after removing those columns
+colnames(Customer_Churn_norm_s)
+```
+
+```{r}
+#MODEL BUILDING
+#make this example reproducible
+#The "set.seed" function is used to initialize the random number generator, so that the results of any random processes are reproducible.
+set.seed(1)
+
+#use 70% of dataset as training set and 30% as test set
+
+#creating a variable "sample" which is a random vector of TRUE and FALSE values, where TRUE values have a probability of 0.7 and FALSE values have a probability of 0.3, with the number of elements equals to the number of rows of the dataframe "Customer_Churn_norm" and allows replacement.
+sample <- sample(c(TRUE, FALSE), nrow(Customer_Churn_norm_s), replace=TRUE, prob=c(0.7,0.3))
+
+# creating a new dataframe called "train" by subsetting the original dataframe "Customer_Churn_norm" using the logical vector "sample" that was generated previously
+train  <- Customer_Churn_norm_s[sample, ]
+#creating a new dataframe called "test" by again subsetting the original dataframe "Customer_Churn_norm". However, this time the subsetting is done by negating the logical vector "sample" using the "not" operator "!" 
+test   <- Customer_Churn_norm_s[!sample, ]
+```
+
+
+**The Parametric Model is a learning model that summarizes data with a set of fixed-size parameters (independent on the number of instances of training).Parametric machine learning algorithms are which optimizes the function to a known form. Here we are building the models with Logistic Regression, Linear Discriminant Analysis.**
+
+**Logistic Regression is used when the dependent variable(target) is categorical. Here our dependent variable is Churn(0 or 1)**
+
+**GLM is more flexible than LM model. The basic idea behind a GLM is to model the mean of the response variable as a linear combination of predictors, while allowing for a non-normal distribution of the response variable itself. Here there might not be a linear relationship between the dependent and independent variables. Here link function is used to map nonlinear relationship to a linear relationship. In logistic regression we find the probability of success. Here we can’t simply use Linear Regression. Here we must use a logit function to find probability then we can map this to build the regression model.**
+**Here the considerations are:**
+1.	Linear or Nonlinear relationship between dependent and independent variables.
+2.	Data might not come for normally distributed family.
+3.	Residuals are normally distributed. 
+4.	Outcome variables can be binary outcome, count variables.**
+```{r}
+########################################
+#PARAMETRIC MACHINE LEARNING ALGORITHMS
+####################################################
+                   #LOGISTIC REGRESSION#           #
+####################################################
+# Training logistic model on the data
+logistic_model <- glm(Churn ~., data = train,family = "binomial")
+
+
+#Printing the summary of the logistic model 
+summary(logistic_model)
+
+#In the below summary, estimates are the coefficients(beta0,beta1..., * stands for significant scores (*** - 99.9% confident, ** - 99% confident, * - 90% confident, . - 90%))
+
+#Null deviance - states that when we are using beta not (only constant(intercept(grand mean))), how much the model is going to deviate from actual
+#def - How well the response variable is predicted by a model that includes only the intercept
+
+#Residual deviance - when we are including the independent variables.
+#def - how well the response variable is predicted with inclusion of independent variable.
+
+#AIC should decrease and residual deviance should not increase - to be considered while removing the independent variables whichever is not significant.
+```
+**Analyzing the output of GLM:**
+ 
+**From the output of the GLM we can say that, total_updates, total_products, total_gained_points , total_prize_requested have high impact on the target variable. If we consider the difference between thr Null Deviance and the residual deviance it is comparatively low that is a plus point.** 
+
+**The below plot shows the confusion matrix, and** 
+*The True Positive is 2081 which means that the model predicted the customers(mums) as not churn and actually they are not churn*
+*The True Negative is 1130 which means that the model predicted the customers(mums) as churn and actually there are churn*
+*The False Positive (Type I error) is 474 which means that the model predicted the customers(mums) as non churn actually they are churn*
+*The False Negative (Type II error) is 635 which means that the model predicted the customers(mums) as churn actually they are non churn*
+*Precision and recall are two different aspects of model performance and are often used in combination to evaluate the overall performance of a model. Precision measures the proportion of true positive predictions out of all positive predictions, while recall measures the proportion of true positive predictions out of all actual positive instances. we can see the sensitivity(Precision) which is 0.74 precision, and the specificity is 0.70*
+```{r}
+# Predicting on the test data based using model
+
+#using the trained logistic regression model "logistic_model" to predict the target variable using all columns from the test dataframe "test" except the 8th one and stores the results in a variable called "predict_reg"
+predict_reg <- predict(logistic_model,test[,-c(9)], type = "response")
+#predict_reg <- predict(logistic_model,train[,-c(9)], type = "response")
+
+#ROCRPred <- prediction(predict_reg,train$Churn)
+#ROCRPref <- performance(ROCRPred,"tpr","fpr")
+
+#plot(ROCRPref,colorize=TRUE,print.cutoffs.at=seq(0.1,by=0.1))
+#Printing the prediction of the model to the output
+
+#converting predicted probabilities into binary class labels for logistic regression models.
+#Changing probabilities into 1 and 0 
+predict_reg <- ifelse(predict_reg >=0.5, 1, 0)
+# Evaluating model accuracy
+# using confusion matrix
+table(test[,c(9)], predict_reg)
+
+rcm <- table(test[,c(9)], predict_reg)
+#calculating the misclassification error rate by comparing the predicted values stored in "predict_reg" with the actual target values from the test dataset "test$Churn" and taking the mean of the resulting logical vector.
+missing_classerr <- mean(predict_reg != test$Churn)
+
+#Printing the accuracy to the output
+print(paste('Accuracy =', 1 - missing_classerr))
+```
+```{r}
+TClass <- factor(c(0, 0, 1, 1))
+PClass <- factor(c(0, 1, 0, 1))
+Y <- c(2081,474,635,1130)
+glm_analysis <-data.frame(TClass,PClass,Y)
+ggplot(data =  glm_analysis, mapping = aes(x = TClass, y =PClass)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "#483D8B", high = "#2F4F4F") +
+  theme_bw() + theme(legend.position = "none")
+```
+```{r}
+confusionMatrix(rcm)
+```
+
+**Linear Discriminant Analysis:**
+
+**Linear Discriminant Analysis is a dimensionality reduction technique that is commonly used for supervised classification problems. It is used for modelling differences in groups i.e. separating two or more classes.The main goal of dimensionality reduction techinques is to reduce the dimensions by removing the reduntant and dependent features by transforming the features from higher dimensional space to a space with lower dimensions.**
+```{r}
+#Linear Discriminant Analysis   
+
+#Building the LDA model on the data
+model <- lda(Churn~., data = train)
+
+#Displaying the model to the output
+model
+```
+
+**The below plot shows the confusion matrix, and** 
+*The True Positive is 782 which means that the model predicted the customers(mums) as non churn and actually there are non churn*
+*The True Negative is 367 which means that the model predicted the customers(mums) as churn and actually they are churn*
+*The False Positive (Type I error) is 983 which means that the model predicted the customers(mums) as non churn actually they are churn*
+*The False Negative (Type II error) is 2188 which means that the model predicted the customers(mums) as churn actually they are non churn*
+*Precision and recall are two different aspects of model performance and are often used in combination to evaluate the overall performance of a model. Precision measures the proportion of true positive predictions out of all positive predictions, while recall measures the proportion of true positive predictions out of all actual positive instances. we can see the sensitivity(Precision) which is 0.74 precision, and the specificity is 0.72*
+```{r}
+# Make predictions using the LDA model built
+predictions <- model %>% predict(test[,-c(9)])
+
+# Confusion Matrix
+cm<-table(test$Churn, predictions$class)
+# Model Evaluation
+confusionMatrix(cm)
+```
+
+```{r}
+TClass <- factor(c(0, 0, 1, 1))
+PClass <- factor(c(0, 1, 0, 1))
+Y <- c(2188,782,367,983)
+lda_analysis <-data.frame(TClass,PClass,Y)
+ggplot(data =  lda_analysis, mapping = aes(x = TClass, y =PClass)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "#483D8B", high = "#2F4F4F") +
+  theme_bw() + theme(legend.position = "none")
+```
+
+
+
+**Nonparametric machine learning algorithms are those which do not make specific assumptions about the type of the mapping function. They are prepared to choose any functional form from the training data, by not making assumptions. The word nonparametric does not mean that the value lacks parameters existing in it, but rather that the parameters are adjustable and can change. When dealing with ranked data one may turn to nonparametric modeling, in which the sequence in that they are ordered is some of the significance of the parameters.**
+
+
+**Here we are building with Random Forest, Support Vector Machine,Decision Tree Classifier**
+
+
+**Random Forest is an ensemble machine learning algorithm that uses multiple decision trees to make predictions. It works by building multiple decision trees on random subsets of the data and combining the predictions of all the trees to make a final prediction.**
+
+**The basic steps of the Random Forest algorithm are:**
+
+**Random Sampling: A random subset of the data is selected to create multiple decision trees, with each tree trained on a different sample.**
+
+**Decision Tree Construction: A decision tree is constructed for each random subset of the data. At each node of the tree, a feature is selected that best splits the data into two subsets. This process is repeated recursively until a stopping criterion is met.**
+
+**Prediction: Each tree makes a prediction for a new data point by traversing the tree from the root node to a leaf node. The prediction for the new data point is determined by the majority vote of all the trees in the forest.**
+
+**Final Prediction: The final prediction for the new data point is the average (for regression problems) or the majority vote (for classification problems) of all the predictions made by the trees in the forest.**
+```{r}
+#NON-PARAMETRIC MODELS
+
+#Random Forest
+
+# Converting ‘Churn’ column to a factor datatype
+#make this example reproducible
+#The "set.seed" function is used to initialize the random number generator, so that the results of any random processes are reproducible.
+set.seed(51)
+
+# Training ‘random forest’ model 
+model <- train(Churn ~., data = train,method = 'rf',trControl = trainControl(method = 'cv',number = 10))
+model
+#Building the model using another library to visualize
+x <- ctree(Churn ~ . , data= train)
+plot(x, type="simple")
+```
+**The below plot shows the confusion matrix, and** 
+*The True Positive is 2217 which means that the model predicted the customers(mums) as non churn and actually there are non churn*
+*The True Negative is 713 which means that the model predicted the customers(mums) as churn and actually they are churn*
+*The False Positive (Type I error) is 1052 which means that the model predicted the customers(mums) as non churn actually they are churn*
+*The False Negative (Type II error) is 338 which means that the model predicted the customers(mums) as churn actually they are non churn*
+*Precision and recall are two different aspects of model performance and are often used in combination to evaluate the overall performance of a model. Precision measures the proportion of true positive predictions out of all positive predictions, while recall measures the proportion of true positive predictions out of all actual positive instances. we can see the sensitivity(Precision) which is 0.76 precision, and the specificity is 0.76*
+```{r}
+#Predicting the labels for the test data using the random forest model
+colnames(test)
+label_predict <- predict(model, newdata = test[,-c(9)])
+
+#Creating the confusion matrix
+confusion_mat <- as.matrix(table(Actual_Values = test[,c(9)], Predicted_Values = label_predict))
+
+#Displaying the confusion matrix to the output
+confusion_mat
+```
+
+```{r}
+#Confusion matrix
+confusionMatrix(confusion_mat)
+```
+```{r}
+TClass <- factor(c(0, 0, 1, 1))
+PClass <- factor(c(0, 1, 0, 1))
+Y <- c(2217,338,713,1052)
+rf_analysis <-data.frame(TClass,PClass,Y)
+ggplot(data =  rf_analysis, mapping = aes(x = TClass, y =PClass)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "#4B0082", high = "#2F4F4F") +
+  theme_bw() + theme(legend.position = "none")
+```
+
+**Support Vector Machine (SVM) is a supervised machine learning algorithm that is used for classification and regression problems. It works by finding the hyperplane in a high-dimensional feature space that best separates the data into different classes or predicts the target value.**
+
+**The basic steps of the SVM algorithm are:**
+
+**Data Preparation: The data is prepared and labeled into different classes.**
+
+**Mapping to Higher Dimensions: The data is mapped into a higher dimensional feature space using a mapping function.**
+
+**Finding the Hyperplane: The SVM algorithm then finds the hyperplane in the high-dimensional feature space that best separates the data into different classes or predicts the target value.**
+
+**Prediction: Given a new data point, the SVM algorithm uses the hyperplane to classify the new data point into one of the classes or predict its target value.**
+
+```{r}
+#Support Vector Machine
+
+# Fitting SVM model to the Training set
+classifier = svm(formula = Churn ~ .,
+                 data = train,
+                 type = 'C-classification',
+                 kernel = 'linear')
+
+#Training on few selected columns to plot visually for demonstration
+svm_analyse = train[,c('Churn','total_gained_points','ETA_MM_BambinoTODAY')]
+#fit support vector machine
+model = svm(Churn ~ total_gained_points + ETA_MM_BambinoTODAY, data = svm_analyse)
+
+#plot support vector machine
+#plot(model, svm_analyse)
+
+#predicting the outputs for the test data
+y_pred = predict(classifier, newdata = test[-9])
+
+# Making the Confusion Matrix
+cm = table(test[, 9], y_pred)
+
+confusionMatrix(cm)
+```
+**The below plot shows the confusion matrix, and** 
+*The True Positive is 2028 which means that the model predicted the customers(mums) as non churn and actually there are non churn*
+*The True Negative is 1150 which means that the model predicted the customers(mums) as churn and actually they are churn*
+*The False Positive (Type I error) is 615 which means that the model predicted the customers(mums) as non churn actually they are churn*
+*The False Negative (Type II error) is 507 which means that the model predicted the customers(mums) as churn actually they are non churn*
+*Precision and recall are two different aspects of model performance and are often used in combination to evaluate the overall performance of a model. Precision measures the proportion of true positive predictions out of all positive predictions, while recall measures the proportion of true positive predictions out of all actual positive instances. we can see the sensitivity(Precision) which is 0.76 precision, and the specificity is 0.69*
+
+```{r}
+TClass <- factor(c(0, 0, 1, 1))
+PClass <- factor(c(0, 1, 0, 1))
+Y <- c(2028,507,615,1150)
+
+#creating the dataframe from TClass,PClass and Y
+svm_analysis <-data.frame(TClass,PClass,Y)
+
+#
+ggplot(data =  svm_analysis, mapping = aes(x = TClass, y =PClass)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "#009933", high = "#ff9900") +
+  theme_bw() + theme(legend.position = "none")
+```
+
+
+*A Decision Tree is a supervised machine-learning algorithm that is used for classification and regression problems. It works by recursively dividing the data into smaller subsets based on the values of the input features until a stopping criterion is met.*
+
+*The basic steps of the Decision Tree algorithm are:*
+*Data Preparation: The data is prepared and labeled into different classes or target values.*
+*Tree Construction: The Decision Tree algorithm starts by selecting the best feature to split the data into two subsets, based on a criterion such as information gain or Gini impurity.*
+
+*Here we are using the RPART package where the Gini impurity is used to perform the split. Gini Impurity is one of the measures which is used to select the feature for the root node and in other internal nodes also known as linked nodes and to perform the optimal split. The lower the impurity, the better the split will be. This is used to provide a homogeneous decision node. Split with lower Gini Impurity is selected. If there is only one class present without any randomness then Gini Impurity will be 0 whereas it will be 1 if there is maximum randomness as in two classes having equal elements.*
+
+*Here the Gini impurity is calculated for the root node as well as internal nodes also called linked nodes and the feature that minimizes the Gini impurity is chosen as the feature to split the data into two subsets. The process is repeated recursively until a stopping criterion is met, such as a maximum depth or a minimum number of samples per leave node.*
+
+*Prediction: Given a new data point, the Decision Tree algorithm traverses the tree from the root node to the end nodes also called Leaves Nodes, based on the values of the input features. The prediction for the new data point is determined by the class or target value associated with the leaf node.*
+
+```{r}
+#Decision Tree Classifier
+
+#Fitting the decision tree model on the trainig data
+fit.tree = rpart(Churn ~ ., data=train, method = "class", cp=0.008)
+
+#Displaying the model 
+fit.tree
+
+#Plotting the decision tree
+rpart.plot(fit.tree)
+```
+
+```{r}
+#Predicting the labels for the test data
+pred.tree = predict(fit.tree,test[,-c(9)], type = "class")
+
+#Building the confusion matrix
+cm<-table(pred.tree,test[,c(9)])
+cm
+
+```
+**The below plot shows the confusion matrix, and** 
+*The True Positive is 2273 which means that the model predicted the customers(mums) as non churn and actually there are non churn*
+*The True Negative is 953 which means that the model predicted the customers(mums) as churn and actually they are churn*
+*The False Positive (Type I error) is 282 which means that the model predicted the customers(mums) as non churn actually they are churn*
+*The False Negative (Type II error) is 812 which means that the model predicted the customers(mums) as churn actually they are non churn*
+*Precision and recall are two different aspects of model performance and are often used in combination to evaluate the overall performance of a model. Precision measures the proportion of true positive predictions out of all positive predictions, while recall measures the proportion of true positive predictions out of all actual positive instances. we can see the sensitivity(Precision) which is 0.87 precision, and the specificity is 0.57*
+
+```{r}
+confusionMatrix(cm)
+```
+```{r}
+TClass <- factor(c(0, 0, 1, 1))
+PClass <- factor(c(0, 1, 0, 1))
+Y <- c(2273,812,282,953)
+#Creating dataframe df_svm from the above variables
+df_svm <-data.frame(TClass,PClass,Y)
+ggplot(data =  df_svm, mapping = aes(x = TClass, y =PClass)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "#cc00cc", high = "#333399") +
+  theme_bw() + theme(legend.position = "none")
+```
+
+
+**PROJECT SUMMARY:**
+  As per the EXploratory Analysis, we can see that the following things have impact on customers(mums) churning:
+  
+  *As we can see the Products purchased, Mission Played and other features, The purchase is gradual for the year and start increasing in November and starts decreasing in december and gradually decrease till March and then again it gets increase gradually in every year. May be the reason behind it will be the winter. The winter starts in december and lasts till Febraury end. So before the winter starts the customers(mums) buying the products (november), so that it gets huge increase in November and decrease from December to Febraury end. So we can suggest that, we can increase the home deliveries, so that they don't need to travel to shop. Also we can launch some seasonal offers. Also we can launch new mission challenges, so that customers will get connected. 
+  
+  *We can see that physical deliverys are higher when comparing to digital gifts. It means customers who are purchasing small products, they are not satisfied with their gifts (digital gifts). So they may leave the product. Our suggestion is that we can control by giving some gift coupons, or small prizes, in that way we can attract the customers and predict them from churning.
+
+  *Most of the customers registered with the babies having 30 months of age, they are not active with the product. In this our suggestion is to launch new products for the babies who are going above 25 months, in that way customers(mums) will be attracted and they will be active with any company products.
+  
+  *Likewise total updates, total points, prize request and total products purchased are high for the customers who are active and low for the customers who is not active(churn). We can also control this by sending email or mobile application notification periodically so that they will be active and there may be a chance of checking the product and purchase.
+  
+  *As we see the provinces, most of the provinces have less purchse rate, we can increase them by launching new promotional advertisements, weekly offers. So that customer aware about the products and they may purchase.
+  
+  *We can see most of regions are going in purchase rate and the same time the region _valle d'aosta_ is the one region which have very less purchase rate. We can launch new products, or launch new missions so that customers(moms) will be active and we can increase the purchase rate.
+
+  *We have many category of Products, in that _Pannolini_ (Pammpers) is the only category which the customers purchase frequently. We can increase other products purchase rate, by launching new products or changing manufacturing methods or design of that product. So that purchase rate of other products will increase.
+  
+
+
+
